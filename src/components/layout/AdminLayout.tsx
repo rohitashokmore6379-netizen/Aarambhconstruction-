@@ -25,6 +25,9 @@ import {
   ChevronDown,
   Menu,
   X,
+  Compass,
+  Globe,
+  Database,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.tsx';
 import api from '../../services/api.ts';
@@ -121,6 +124,14 @@ export function AdminLayout({ children }: AdminLayoutProps) {
         { label: 'Inventory Audit', path: '/admin/inventory', icon: Boxes },
         { label: 'Vendors Directory', path: '/admin/vendors', icon: Truck },
         { label: 'Vendor Settlements', path: '/admin/vendor-payments', icon: CreditCard },
+      ],
+    },
+    {
+      title: 'GOOGLE CLOUD & WORKSPACE',
+      items: [
+        { label: 'Site GIS & Live Maps', path: '/admin/maps', icon: Compass, highlight: true },
+        { label: 'Google Workspace Hub', path: '/admin/workspace', icon: Globe },
+        { label: 'Cloud SQL & Firebase', path: '/admin/cloud-db', icon: Database },
       ],
     },
     {

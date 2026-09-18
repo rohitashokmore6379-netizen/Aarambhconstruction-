@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { MapPin, Phone, Mail, Clock, Send, CheckCircle2, AlertCircle, Building2, MessageSquare } from 'lucide-react';
+import { MapPin, Phone, Mail, Clock, Send, CheckCircle2, AlertCircle, Building2, MessageSquare, Compass } from 'lucide-react';
 import api from '../../services/api.ts';
+import { GoogleMapsView } from '../../components/maps/GoogleMapsView.tsx';
 
 export function ContactPage() {
   const [name, setName] = useState<string>('');
@@ -235,6 +236,26 @@ export function ContactPage() {
             </form>
           )}
         </div>
+      </div>
+
+      {/* Interactive Live Google Map */}
+      <div className="space-y-4 pt-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <div className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+              <Compass className="w-4 h-4" />
+              Live Site GIS & Location Map
+            </div>
+            <h2 className="text-xl sm:text-2xl font-bold text-white mt-0.5">
+              Arambh Construction Headquarters & Active Sites
+            </h2>
+          </div>
+          <p className="text-xs text-slate-400 max-w-sm">
+            Interactive map centered at Shengaon, Taluka Bhudargad, Kolhapur with satellite view & GPS driving directions.
+          </p>
+        </div>
+
+        <GoogleMapsView height="460px" />
       </div>
     </div>
   );
