@@ -3,6 +3,7 @@ import { Vendor, VendorPayment } from '../models/index.ts';
 import { AuthRequest } from '../middleware/auth.ts';
 import { createAuditLog } from '../services/auditService.ts';
 import { calculateProjectFinancials } from '../services/financialService.ts';
+import { cleanObjectId } from '../utils/sanitize.ts';
 
 export async function getVendors(req: AuthRequest, res: Response) {
   try {
@@ -23,23 +24,31 @@ export async function getVendors(req: AuthRequest, res: Response) {
 
 export async function createVendor(req: AuthRequest, res: Response) {
   try {
-    const { name, companyName, phone, email, address, category, gstNumber } = req.body;
-    if (!name || !companyName || !phone) {
-      return res.status(400).json({ success: false, message: 'Vendor Name, Company Name, and Phone are required.' });
+    const body = req.body || {};
+    const name = String(body.name || '').trim();
+    if (!name) {
+      return res.status(400).json({ success: false, message: 'Vendor Name is required.' });
     }
 
+    const companyName = String(body.companyName || name).trim();
+    const phone = String(body.phone || '-').trim();
+
     const count = await Vendor.countDocuments();
-    const vendorCode = `VND-${String(count + 1).padStart(3, '0')}`;
+    let vendorCode = `VND-${String(count + 1).padStart(3, '0')}`;
+    const existing = await Vendor.findOne({ vendorCode });
+    if (existing) {
+      vendorCode = `VND-${String(count + 1).padStart(3, '0')}-${Date.now().toString().slice(-4)}`;
+    }
 
     const vendor = await Vendor.create({
       vendorCode,
-      name: name.trim(),
-      companyName: companyName.trim(),
-      phone: phone.trim(),
-      email,
-      address,
-      category: category || 'Building Materials',
-      gstNumber,
+      name,
+      companyName,
+      phone,
+      email: body.email || '',
+      address: body.address || '',
+      category: body.category || 'Building Materials',
+      gstNumber: body.gstNumber || '',
       totalAmount: 0,
       paidAmount: 0,
       pendingAmount: 0,
@@ -77,9 +86,12 @@ export async function getVendorPayments(req: AuthRequest, res: Response) {
   try {
     const { projectId, siteId, vendorId, status } = req.query;
     const filter: any = {};
-    if (projectId) filter.projectId = projectId;
-    if (siteId) filter.siteId = siteId;
-    if (vendorId) filter.vendorId = vendorId;
+    const pId = cleanObjectId(projectId);
+    const sId = cleanObjectId(siteId);
+    const vId = cleanObjectId(vendorId);
+    if (pId) filter.projectId = pId;
+    if (sId) filter.siteId = sId;
+    if (vId) filter.vendorId = vId;
     if (status && status !== 'ALL') filter.status = status;
 
     const payments = await VendorPayment.find(filter)
@@ -97,32 +109,24 @@ export async function getVendorPayments(req: AuthRequest, res: Response) {
 
 export async function createVendorPayment(req: AuthRequest, res: Response) {
   try {
-    const {
-      projectId,
-      siteId,
-      vendorId,
-      amount,
-      paymentMethod,
-      onlineMethod,
-      transactionReference,
-      receiptNumber,
-      paymentDate,
-      notes,
-    } = req.body;
-
-    const numAmount = Number(amount);
+    const body = req.body || {};
+    const numAmount = Number(body.amount);
     if (!numAmount || numAmount <= 0) {
       return res.status(400).json({ success: false, message: 'Payment amount must be greater than zero.' });
     }
 
-    if (!projectId || !siteId || !vendorId) {
-      return res.status(400).json({ success: false, message: 'Project, Site, and Vendor are required.' });
+    const vendorId = cleanObjectId(body.vendorId);
+    if (!vendorId) {
+      return res.status(400).json({ success: false, message: 'Vendor is required.' });
     }
 
     const vendor = await Vendor.findById(vendorId);
     if (!vendor) return res.status(404).json({ success: false, message: 'Vendor not found.' });
 
-    let finalReceiptNumber = receiptNumber?.trim();
+    const projectId = cleanObjectId(body.projectId);
+    const siteId = cleanObjectId(body.siteId);
+
+    let finalReceiptNumber = body.receiptNumber?.trim();
     if (!finalReceiptNumber) {
       const count = await VendorPayment.countDocuments();
       finalReceiptNumber = `VPAY-${new Date().getFullYear()}-${String(count + 1).padStart(4, '0')}`;
@@ -133,12 +137,12 @@ export async function createVendorPayment(req: AuthRequest, res: Response) {
       siteId,
       vendorId,
       amount: numAmount,
-      paymentMethod: paymentMethod || 'ONLINE',
-      onlineMethod: paymentMethod === 'ONLINE' ? onlineMethod : undefined,
-      transactionReference,
+      paymentMethod: body.paymentMethod || 'ONLINE',
+      onlineMethod: body.paymentMethod === 'ONLINE' ? body.onlineMethod : undefined,
+      transactionReference: body.transactionReference || '',
       receiptNumber: finalReceiptNumber,
-      paymentDate: paymentDate ? new Date(paymentDate) : new Date(),
-      notes,
+      paymentDate: body.paymentDate ? new Date(body.paymentDate) : new Date(),
+      notes: body.notes || '',
       status: 'PAID',
       createdBy: req.user?.id,
     });
@@ -155,11 +159,11 @@ export async function createVendorPayment(req: AuthRequest, res: Response) {
       entityType: 'VendorPayment',
       entityId: payment._id.toString(),
       projectId,
-      description: `Settled payment of ₹${numAmount.toLocaleString('en-IN')} to ${vendor.companyName} (${paymentMethod}, Ref: ${finalReceiptNumber})`,
+      description: `Settled payment of ₹${numAmount.toLocaleString('en-IN')} to ${vendor.companyName} (${payment.paymentMethod}, Ref: ${finalReceiptNumber})`,
       ipAddress: req.ip,
     });
 
-    const updatedFinancials = await calculateProjectFinancials(projectId);
+    const updatedFinancials = projectId ? await calculateProjectFinancials(projectId) : null;
 
     return res.status(201).json({
       success: true,

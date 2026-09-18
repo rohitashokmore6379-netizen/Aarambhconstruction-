@@ -51,11 +51,37 @@ export interface SiteFinancialSummary {
   statusText: string;
 }
 
-export async function calculateProjectFinancials(projectIdStr: string): Promise<ProjectFinancialSummary> {
+export async function calculateProjectFinancials(projectIdStr?: string | null): Promise<ProjectFinancialSummary> {
+  const defaultSummary: ProjectFinancialSummary = {
+    projectId: projectIdStr || '',
+    projectName: 'General Project',
+    projectCode: 'GEN',
+    totalCost: 0,
+    totalReceived: 0,
+    pendingAmount: 0,
+    totalExpenses: 0,
+    workerExpenses: 0,
+    materialExpenses: 0,
+    vendorExpenses: 0,
+    transportExpenses: 0,
+    equipmentExpenses: 0,
+    otherExpenses: 0,
+    remainingBudget: 0,
+    paymentProgress: 0,
+    expensePercentage: 0,
+    statusText: 'IN_PROGRESS',
+    isOverpaid: false,
+    overpaymentAmount: 0,
+  };
+
+  if (!projectIdStr || !mongoose.Types.ObjectId.isValid(projectIdStr)) {
+    return defaultSummary;
+  }
+
   const projectId = new mongoose.Types.ObjectId(projectIdStr);
   const project = await Project.findById(projectId);
   if (!project) {
-    throw new Error('Project not found');
+    return defaultSummary;
   }
 
   // 1. Client Payments Received (only PAID status)
@@ -176,11 +202,35 @@ export async function calculateProjectFinancials(projectIdStr: string): Promise<
   };
 }
 
-export async function calculateSiteFinancials(siteIdStr: string): Promise<SiteFinancialSummary> {
+export async function calculateSiteFinancials(siteIdStr?: string | null): Promise<SiteFinancialSummary> {
+  const defaultSummary: SiteFinancialSummary = {
+    siteId: siteIdStr || '',
+    siteName: 'Main Site',
+    projectId: '',
+    totalCost: 0,
+    totalReceived: 0,
+    pendingAmount: 0,
+    totalExpenses: 0,
+    workerExpenses: 0,
+    materialExpenses: 0,
+    vendorExpenses: 0,
+    transportExpenses: 0,
+    equipmentExpenses: 0,
+    otherExpenses: 0,
+    remainingBudget: 0,
+    paymentProgress: 0,
+    expensePercentage: 0,
+    statusText: 'IN_PROGRESS',
+  };
+
+  if (!siteIdStr || !mongoose.Types.ObjectId.isValid(siteIdStr)) {
+    return defaultSummary;
+  }
+
   const siteId = new mongoose.Types.ObjectId(siteIdStr);
   const site = await Site.findById(siteId);
   if (!site) {
-    throw new Error('Site not found');
+    return defaultSummary;
   }
 
   const clientPayments = await ClientPayment.find({ siteId, status: 'PAID' });

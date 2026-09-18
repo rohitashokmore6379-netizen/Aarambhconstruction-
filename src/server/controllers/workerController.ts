@@ -3,6 +3,7 @@ import { Worker, WorkType, WorkLog, WorkerPayment, Project, Site } from '../mode
 import { AuthRequest } from '../middleware/auth.ts';
 import { createAuditLog } from '../services/auditService.ts';
 import { calculateProjectFinancials } from '../services/financialService.ts';
+import { cleanObjectId } from '../utils/sanitize.ts';
 
 // ---------------- WORKERS ----------------
 export async function getWorkers(req: AuthRequest, res: Response) {
@@ -26,18 +27,22 @@ export async function getWorkers(req: AuthRequest, res: Response) {
 export async function createWorker(req: AuthRequest, res: Response) {
   try {
     const { name, phone, address, role, skill, dailyWageRate, joiningDate, notes } = req.body;
-    if (!name || !phone) {
-      return res.status(400).json({ success: false, message: 'Worker Name and Phone are required.' });
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ success: false, message: 'Worker Name is required.' });
     }
 
     const count = await Worker.countDocuments();
-    const workerCode = `WRK-${100 + count + 1}`;
+    let workerCode = `WRK-${100 + count + 1}`;
+    const existing = await Worker.findOne({ workerCode });
+    if (existing) {
+      workerCode = `WRK-${100 + count + 1}-${Date.now().toString().slice(-4)}`;
+    }
 
     const worker = await Worker.create({
       workerCode,
-      name: name.trim(),
-      phone: phone.trim(),
-      address,
+      name: String(name).trim(),
+      phone: phone ? String(phone).trim() : '-',
+      address: address || '',
       role: role || 'Construction Worker',
       skill: skill || 'MASON',
       dailyWageRate: Number(dailyWageRate) || 600,
@@ -111,9 +116,12 @@ export async function getWorkLogs(req: AuthRequest, res: Response) {
   try {
     const { projectId, siteId, workerId } = req.query;
     const filter: any = {};
-    if (projectId) filter.projectId = projectId;
-    if (siteId) filter.siteId = siteId;
-    if (workerId) filter.workerId = workerId;
+    const pId = cleanObjectId(projectId);
+    const sId = cleanObjectId(siteId);
+    const wId = cleanObjectId(workerId);
+    if (pId) filter.projectId = pId;
+    if (sId) filter.siteId = sId;
+    if (wId) filter.workerId = wId;
 
     const logs = await WorkLog.find(filter)
       .populate('workerId', 'name workerCode skill phone')
@@ -130,10 +138,34 @@ export async function getWorkLogs(req: AuthRequest, res: Response) {
 
 export async function createWorkLog(req: AuthRequest, res: Response) {
   try {
-    const { projectId, siteId, workerId, workTypeId, workDate, daysWorked, dailyRate, notes } = req.body;
+    const body = req.body || {};
+    const workerId = cleanObjectId(body.workerId);
+    if (!workerId) {
+      return res.status(400).json({ success: false, message: 'Worker is required for work log.' });
+    }
 
-    const days = Number(daysWorked);
-    const rate = Number(dailyRate);
+    let projectId = cleanObjectId(body.projectId);
+    if (!projectId) {
+      const firstProj = await Project.findOne();
+      if (firstProj) {
+        projectId = firstProj._id.toString();
+      } else {
+        const newProj = await Project.create({
+          projectCode: 'PRJ-001',
+          projectName: 'General Project',
+          location: 'Kolhapur',
+          client: { name: 'Direct Client' },
+          createdBy: req.user?.id,
+        });
+        projectId = newProj._id.toString();
+      }
+    }
+
+    const siteId = cleanObjectId(body.siteId);
+    const workTypeId = cleanObjectId(body.workTypeId);
+
+    const days = Number(body.daysWorked);
+    const rate = Number(body.dailyRate);
     if (!days || days <= 0 || rate < 0) {
       return res.status(400).json({ success: false, message: 'Days worked must be > 0 and rate >= 0' });
     }
@@ -145,18 +177,18 @@ export async function createWorkLog(req: AuthRequest, res: Response) {
       siteId,
       workerId,
       workTypeId,
-      workDate: workDate ? new Date(workDate) : new Date(),
+      workDate: body.workDate ? new Date(body.workDate) : new Date(),
       daysWorked: days,
       dailyRate: rate,
       amount,
-      notes,
+      notes: body.notes || '',
       createdBy: req.user?.id,
     });
 
     return res.status(201).json({
       success: true,
       data: log,
-      message: `Work log logged: ${days} days @ ₹${rate} = ₹${amount}`,
+      message: `Work log recorded: ${days} days @ ₹${rate} = ₹${amount}`,
     });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: err.message });
@@ -168,9 +200,12 @@ export async function getWorkerPayments(req: AuthRequest, res: Response) {
   try {
     const { projectId, siteId, workerId, status } = req.query;
     const filter: any = {};
-    if (projectId) filter.projectId = projectId;
-    if (siteId) filter.siteId = siteId;
-    if (workerId) filter.workerId = workerId;
+    const pId = cleanObjectId(projectId);
+    const sId = cleanObjectId(siteId);
+    const wId = cleanObjectId(workerId);
+    if (pId) filter.projectId = pId;
+    if (sId) filter.siteId = sId;
+    if (wId) filter.workerId = wId;
     if (status && status !== 'ALL') filter.status = status;
 
     const payments = await WorkerPayment.find(filter)
@@ -189,25 +224,10 @@ export async function getWorkerPayments(req: AuthRequest, res: Response) {
 
 export async function createWorkerPayment(req: AuthRequest, res: Response) {
   try {
-    const {
-      projectId,
-      siteId,
-      workerId,
-      workTypeId,
-      workDate,
-      daysWorked,
-      dailyRate,
-      amount,
-      paymentMethod,
-      onlineMethod,
-      transactionReference,
-      paymentDate,
-      notes,
-    } = req.body;
-
-    const numAmount = Number(amount);
-    if (!numAmount || numAmount <= 0) {
-      return res.status(400).json({ success: false, message: 'Wage amount must be greater than zero.' });
+    const body = req.body || {};
+    const workerId = cleanObjectId(body.workerId);
+    if (!workerId) {
+      return res.status(400).json({ success: false, message: 'Worker is required for payment.' });
     }
 
     const worker = await Worker.findById(workerId);
@@ -215,20 +235,29 @@ export async function createWorkerPayment(req: AuthRequest, res: Response) {
       return res.status(404).json({ success: false, message: 'Worker not found.' });
     }
 
+    const numAmount = Number(body.amount);
+    if (!numAmount || numAmount <= 0) {
+      return res.status(400).json({ success: false, message: 'Wage amount must be greater than zero.' });
+    }
+
+    const projectId = cleanObjectId(body.projectId);
+    const siteId = cleanObjectId(body.siteId);
+    const workTypeId = cleanObjectId(body.workTypeId);
+
     const payment = await WorkerPayment.create({
       projectId,
       siteId,
       workerId,
       workTypeId,
-      workDate: workDate ? new Date(workDate) : undefined,
-      daysWorked: Number(daysWorked) || 1,
-      dailyRate: Number(dailyRate) || worker.dailyWageRate,
+      workDate: body.workDate ? new Date(body.workDate) : undefined,
+      daysWorked: Number(body.daysWorked) || 1,
+      dailyRate: Number(body.dailyRate) || worker.dailyWageRate,
       amount: numAmount,
-      paymentMethod: paymentMethod || 'CASH',
-      onlineMethod: paymentMethod === 'ONLINE' ? onlineMethod : undefined,
-      transactionReference,
-      paymentDate: paymentDate ? new Date(paymentDate) : new Date(),
-      notes,
+      paymentMethod: body.paymentMethod || 'CASH',
+      onlineMethod: body.paymentMethod === 'ONLINE' ? body.onlineMethod : undefined,
+      transactionReference: body.transactionReference || '',
+      paymentDate: body.paymentDate ? new Date(body.paymentDate) : new Date(),
+      notes: body.notes || '',
       status: 'PAID',
       createdBy: req.user?.id,
     });
@@ -240,11 +269,11 @@ export async function createWorkerPayment(req: AuthRequest, res: Response) {
       entityType: 'WorkerPayment',
       entityId: payment._id.toString(),
       projectId,
-      description: `Disbursed wage payment of ₹${numAmount.toLocaleString('en-IN')} to ${worker.name} (${paymentMethod})`,
+      description: `Disbursed wage payment of ₹${numAmount.toLocaleString('en-IN')} to ${worker.name} (${payment.paymentMethod})`,
       ipAddress: req.ip,
     });
 
-    const updatedFinancials = await calculateProjectFinancials(projectId);
+    const updatedFinancials = projectId ? await calculateProjectFinancials(projectId) : null;
 
     return res.status(201).json({
       success: true,

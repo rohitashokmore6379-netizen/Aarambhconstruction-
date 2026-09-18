@@ -141,7 +141,7 @@ const SiteSchema = new Schema<ISite>(
 // ----------------------------------------------------
 export interface IClientPayment extends Document {
   projectId: Types.ObjectId;
-  siteId: Types.ObjectId;
+  siteId?: Types.ObjectId;
   ownerName: string;
   paymentDate: Date;
   amount: number;
@@ -164,7 +164,7 @@ export interface IClientPayment extends Document {
 const ClientPaymentSchema = new Schema<IClientPayment>(
   {
     projectId: { type: Schema.Types.ObjectId, ref: 'Project', required: true, index: true },
-    siteId: { type: Schema.Types.ObjectId, ref: 'Site', required: true, index: true },
+    siteId: { type: Schema.Types.ObjectId, ref: 'Site', index: true },
     ownerName: { type: String, required: true, trim: true },
     paymentDate: { type: Date, required: true, default: Date.now, index: true },
     amount: { type: Number, required: true, min: 1 },
@@ -254,9 +254,9 @@ const WorkTypeSchema = new Schema<IWorkType>(
 // ----------------------------------------------------
 export interface IWorkLog extends Document {
   projectId: Types.ObjectId;
-  siteId: Types.ObjectId;
+  siteId?: Types.ObjectId;
   workerId: Types.ObjectId;
-  workTypeId: Types.ObjectId;
+  workTypeId?: Types.ObjectId;
   workDate: Date;
   daysWorked: number;
   dailyRate: number;
@@ -268,9 +268,9 @@ export interface IWorkLog extends Document {
 const WorkLogSchema = new Schema<IWorkLog>(
   {
     projectId: { type: Schema.Types.ObjectId, ref: 'Project', required: true, index: true },
-    siteId: { type: Schema.Types.ObjectId, ref: 'Site', required: true, index: true },
+    siteId: { type: Schema.Types.ObjectId, ref: 'Site', index: true },
     workerId: { type: Schema.Types.ObjectId, ref: 'Worker', required: true, index: true },
-    workTypeId: { type: Schema.Types.ObjectId, ref: 'WorkType', required: true },
+    workTypeId: { type: Schema.Types.ObjectId, ref: 'WorkType' },
     workDate: { type: Date, required: true, default: Date.now, index: true },
     daysWorked: { type: Number, required: true, min: 0.25 },
     dailyRate: { type: Number, required: true, min: 0 },
@@ -285,8 +285,8 @@ const WorkLogSchema = new Schema<IWorkLog>(
 // WORKER PAYMENT MODEL
 // ----------------------------------------------------
 export interface IWorkerPayment extends Document {
-  projectId: Types.ObjectId;
-  siteId: Types.ObjectId;
+  projectId?: Types.ObjectId;
+  siteId?: Types.ObjectId;
   workerId: Types.ObjectId;
   workTypeId?: Types.ObjectId;
   workDate?: Date;
@@ -307,8 +307,8 @@ export interface IWorkerPayment extends Document {
 
 const WorkerPaymentSchema = new Schema<IWorkerPayment>(
   {
-    projectId: { type: Schema.Types.ObjectId, ref: 'Project', required: true, index: true },
-    siteId: { type: Schema.Types.ObjectId, ref: 'Site', required: true, index: true },
+    projectId: { type: Schema.Types.ObjectId, ref: 'Project', index: true },
+    siteId: { type: Schema.Types.ObjectId, ref: 'Site', index: true },
     workerId: { type: Schema.Types.ObjectId, ref: 'Worker', required: true, index: true },
     workTypeId: { type: Schema.Types.ObjectId, ref: 'WorkType' },
     workDate: { type: Date },
@@ -403,8 +403,8 @@ const VendorSchema = new Schema<IVendor>(
 // MATERIAL PURCHASE MODEL
 // ----------------------------------------------------
 export interface IMaterialPurchase extends Document {
-  projectId: Types.ObjectId;
-  siteId: Types.ObjectId;
+  projectId?: Types.ObjectId;
+  siteId?: Types.ObjectId;
   materialId: Types.ObjectId;
   vendorId: Types.ObjectId;
   purchaseDate: Date;
@@ -427,8 +427,8 @@ export interface IMaterialPurchase extends Document {
 
 const MaterialPurchaseSchema = new Schema<IMaterialPurchase>(
   {
-    projectId: { type: Schema.Types.ObjectId, ref: 'Project', required: true, index: true },
-    siteId: { type: Schema.Types.ObjectId, ref: 'Site', required: true, index: true },
+    projectId: { type: Schema.Types.ObjectId, ref: 'Project', index: true },
+    siteId: { type: Schema.Types.ObjectId, ref: 'Site', index: true },
     materialId: { type: Schema.Types.ObjectId, ref: 'Material', required: true, index: true },
     vendorId: { type: Schema.Types.ObjectId, ref: 'Vendor', required: true, index: true },
     purchaseDate: { type: Date, required: true, default: Date.now, index: true },
@@ -496,8 +496,8 @@ const InventoryTransactionSchema = new Schema<IInventoryTransaction>(
 // VENDOR PAYMENT MODEL
 // ----------------------------------------------------
 export interface IVendorPayment extends Document {
-  projectId: Types.ObjectId;
-  siteId: Types.ObjectId;
+  projectId?: Types.ObjectId;
+  siteId?: Types.ObjectId;
   vendorId: Types.ObjectId;
   purchaseId?: Types.ObjectId;
   amount: number;
@@ -516,8 +516,8 @@ export interface IVendorPayment extends Document {
 
 const VendorPaymentSchema = new Schema<IVendorPayment>(
   {
-    projectId: { type: Schema.Types.ObjectId, ref: 'Project', required: true, index: true },
-    siteId: { type: Schema.Types.ObjectId, ref: 'Site', required: true, index: true },
+    projectId: { type: Schema.Types.ObjectId, ref: 'Project', index: true },
+    siteId: { type: Schema.Types.ObjectId, ref: 'Site', index: true },
     vendorId: { type: Schema.Types.ObjectId, ref: 'Vendor', required: true, index: true },
     purchaseId: { type: Schema.Types.ObjectId, ref: 'MaterialPurchase' },
     amount: { type: Number, required: true, min: 1 },
@@ -543,8 +543,8 @@ const VendorPaymentSchema = new Schema<IVendorPayment>(
 // EXPENSE MODEL
 // ----------------------------------------------------
 export interface IExpense extends Document {
-  projectId: Types.ObjectId;
-  siteId: Types.ObjectId;
+  projectId?: Types.ObjectId;
+  siteId?: Types.ObjectId;
   category: 'WORKER' | 'MATERIAL' | 'VENDOR' | 'TRANSPORT' | 'EQUIPMENT' | 'OTHER';
   description: string;
   amount: number;
@@ -562,8 +562,8 @@ export interface IExpense extends Document {
 
 const ExpenseSchema = new Schema<IExpense>(
   {
-    projectId: { type: Schema.Types.ObjectId, ref: 'Project', required: true, index: true },
-    siteId: { type: Schema.Types.ObjectId, ref: 'Site', required: true, index: true },
+    projectId: { type: Schema.Types.ObjectId, ref: 'Project', index: true },
+    siteId: { type: Schema.Types.ObjectId, ref: 'Site', index: true },
     category: {
       type: String,
       enum: ['WORKER', 'MATERIAL', 'VENDOR', 'TRANSPORT', 'EQUIPMENT', 'OTHER'],

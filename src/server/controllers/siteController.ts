@@ -65,31 +65,56 @@ export async function getSiteById(req: AuthRequest, res: Response) {
   }
 }
 
+import { cleanObjectId } from '../utils/sanitize.js';
+
 export async function createSite(req: AuthRequest, res: Response) {
   try {
-    const { projectId, siteName, location, address, siteOwner, ownerContact, description, totalCost } = req.body;
-    if (!projectId || !siteName || !location || !siteOwner) {
+    const body = req.body || {};
+    const rawSiteName = body.siteName || body.name || '';
+    const trimmedName = String(rawSiteName).trim();
+
+    if (!trimmedName) {
       return res.status(400).json({
         success: false,
-        message: 'Project, Site Name, Location, and Site Owner are required.',
+        message: 'Site Name is required.',
       });
     }
 
-    const project = await Project.findById(projectId);
-    if (!project) {
-      return res.status(404).json({ success: false, message: 'Target project does not exist.' });
+    let pId = cleanObjectId(body.projectId);
+    let project = null;
+
+    if (pId) {
+      project = await Project.findById(pId);
     }
 
+    if (!project) {
+      // Find the first available project or create a default one
+      project = await Project.findOne();
+      if (!project) {
+        project = await Project.create({
+          projectCode: 'PRJ-001',
+          projectName: `${trimmedName} Project`,
+          location: body.location || 'Kolhapur, Maharashtra',
+          client: { name: body.siteOwner || 'Direct Client' },
+          contractValue: Number(body.totalCost) || 0,
+          createdBy: req.user?.id,
+        });
+      }
+    }
+
+    const loc = String(body.location || body.address || project.location || 'Kolhapur, Maharashtra').trim();
+    const owner = String(body.siteOwner || project.client?.name || 'Site Owner').trim();
+
     const site = await Site.create({
-      projectId,
-      siteName: siteName.trim(),
-      location: location.trim(),
-      address,
-      siteOwner: siteOwner.trim(),
-      ownerContact,
-      description,
-      totalCost: Number(totalCost) || 0,
-      status: 'ACTIVE',
+      projectId: project._id,
+      siteName: trimmedName,
+      location: loc,
+      address: body.address || loc,
+      siteOwner: owner,
+      ownerContact: body.ownerContact || project.client?.phone || '',
+      description: body.description || '',
+      totalCost: Number(body.totalCost) || 0,
+      status: body.status || 'ACTIVE',
       createdBy: req.user?.id,
     });
 

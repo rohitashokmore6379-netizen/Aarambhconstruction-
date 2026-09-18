@@ -78,53 +78,69 @@ export async function getProjectById(req: AuthRequest, res: Response) {
 
 export async function createProject(req: AuthRequest, res: Response) {
   try {
-    const {
-      projectCode,
-      projectName,
-      description,
-      projectType,
-      location,
-      client,
-      contractValue,
-      estimatedCost,
-      status,
-      progressPercentage,
-      isPublic,
-      publicStatus,
-      publicImages,
-      privateNotes,
-    } = req.body;
+    const body = req.body || {};
+    const rawName = body.projectName || body.name || '';
+    const trimmedName = String(rawName).trim();
 
-    if (!projectCode || !projectName || !location || !client?.name) {
+    if (!trimmedName) {
       return res.status(400).json({
         success: false,
-        message: 'Project Code, Project Name, Location, and Client Name are required.',
+        message: 'Project Name is required.',
       });
     }
 
-    const existing = await Project.findOne({ projectCode: projectCode.toUpperCase().trim() });
-    if (existing) {
-      return res.status(400).json({
-        success: false,
-        message: `Project with code "${projectCode.toUpperCase()}" already exists.`,
-      });
+    // Auto-generate project code if missing or empty
+    let code = (body.projectCode || body.code || '').trim().toUpperCase();
+    if (!code) {
+      const count = await Project.countDocuments();
+      code = `PRJ-${String(count + 1).padStart(3, '0')}`;
+      const existingWithCode = await Project.findOne({ projectCode: code });
+      if (existingWithCode) {
+        code = `PRJ-${String(count + 1).padStart(3, '0')}-${Date.now().toString().slice(-4)}`;
+      }
+    } else {
+      const existing = await Project.findOne({ projectCode: code });
+      if (existing) {
+        code = `${code}-${Date.now().toString().slice(-4)}`;
+      }
     }
+
+    // Resolve client structure safely
+    let clientObj: any = { name: 'Direct Client', phone: '', email: '', address: '' };
+    if (typeof body.client === 'object' && body.client !== null) {
+      clientObj = {
+        name: String(body.client.name || body.clientName || 'Direct Client').trim(),
+        phone: String(body.client.phone || body.clientPhone || '').trim(),
+        email: String(body.client.email || '').trim(),
+        address: String(body.client.address || '').trim(),
+      };
+    } else if (typeof body.client === 'string' && body.client.trim()) {
+      clientObj.name = body.client.trim();
+      if (body.clientPhone) clientObj.phone = String(body.clientPhone).trim();
+    } else if (body.clientName && String(body.clientName).trim()) {
+      clientObj.name = String(body.clientName).trim();
+      if (body.clientPhone) clientObj.phone = String(body.clientPhone).trim();
+    }
+
+    const loc = String(body.location || body.address || 'Kolhapur, Maharashtra').trim();
+    const contractVal = Number(body.contractValue) || 0;
+    const estimatedVal = Number(body.estimatedCost) || contractVal || 0;
 
     const project = await Project.create({
-      projectCode: projectCode.toUpperCase().trim(),
-      projectName: projectName.trim(),
-      description,
-      projectType: projectType || 'Residential',
-      location: location.trim(),
-      client,
-      contractValue: Number(contractValue) || 0,
-      estimatedCost: Number(estimatedCost) || Number(contractValue) || 0,
-      status: status || 'IN_PROGRESS',
-      progressPercentage: Number(progressPercentage) || 0,
-      isPublic: isPublic ?? true,
-      publicStatus: publicStatus || 'Planning & Site Mobilization',
-      publicImages: publicImages || [],
-      privateNotes,
+      projectCode: code,
+      projectName: trimmedName,
+      description: body.description || '',
+      projectType: body.projectType || 'Residential',
+      location: loc,
+      client: clientObj,
+      contractValue: contractVal,
+      estimatedCost: estimatedVal,
+      status: body.status || 'IN_PROGRESS',
+      progressPercentage: Number(body.progressPercentage) || 0,
+      isPublic: body.isPublic ?? true,
+      publicStatus: body.publicStatus || 'Planning & Site Mobilization',
+      publicImages: Array.isArray(body.publicImages) ? body.publicImages : [],
+      privateNotes: body.privateNotes || '',
       createdBy: req.user?.id,
     });
 
