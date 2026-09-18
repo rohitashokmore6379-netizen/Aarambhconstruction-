@@ -16,6 +16,7 @@ import {
   RefreshCw,
   Wallet,
   Clock,
+  CalendarCheck,
   PieChart as PieChartIcon,
 } from 'lucide-react';
 import {
@@ -132,6 +133,13 @@ export function DashboardPage() {
             <Plus className="w-4 h-4" />
             <span>Receive Payment</span>
           </button>
+          <Link
+            to="/admin/work-schedules"
+            className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-400 font-bold text-xs border border-slate-700 transition-all flex items-center gap-1.5 shrink-0"
+          >
+            <CalendarCheck className="w-3.5 h-3.5" />
+            <span>Work Schedule</span>
+          </Link>
           <Link
             to="/admin/projects"
             className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs border border-slate-700 transition-all flex items-center gap-1.5 shrink-0"

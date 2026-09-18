@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import { DEFAULT_CONSTRUCTION_ACTIVITIES } from '../../data/constructionActivities.ts';
 import {
   User,
   Project,
@@ -17,13 +18,24 @@ import {
   CompanySettings,
   Notification,
   AuditLog,
+  WorkSchedule,
+  WorkProgressUpdate,
+  WorkImage,
+  WorkQuantityRecord,
+  WorkLaborRecord,
 } from '../models/index.ts';
 
-export async function seedDatabase(forceRefresh = true) {
+export async function seedDatabase(forceRefresh = false) {
   try {
-    console.log('Clearing old project and mock content for fresh Arambh Construction ERP initialization...');
+    const existingUsers = await User.countDocuments();
+    if (!forceRefresh && existingUsers > 0) {
+      console.log('Database already initialized. Preserving existing admin credentials and projects.');
+      return;
+    }
 
-    // Wipe all previous project content completely as requested
+    console.log('Initializing Arambh Construction ERP database...');
+
+    // Wipe all previous project content completely when force refreshed
     await Promise.all([
       User.deleteMany({}),
       Project.deleteMany({}),
@@ -42,6 +54,11 @@ export async function seedDatabase(forceRefresh = true) {
       CompanySettings.deleteMany({}),
       Notification.deleteMany({}),
       AuditLog.deleteMany({}),
+      WorkSchedule.deleteMany({}),
+      WorkProgressUpdate.deleteMany({}),
+      WorkImage.deleteMany({}),
+      WorkQuantityRecord.deleteMany({}),
+      WorkLaborRecord.deleteMany({}),
     ]);
 
     console.log('Seeding fresh enterprise data for Er. Sudarshan Bajrang Naik...');
@@ -62,26 +79,32 @@ export async function seedDatabase(forceRefresh = true) {
       licenseNumber: 'PWD/KOP/2021/CLASS-A/0942',
     });
 
-    // 2. Seed Admin Users (Both Er. Sudarshan Naik and backup login)
-    const passwordHash = await bcrypt.hash('Admin@123', 10);
+    // 2. Seed Admin Users (Exact credentials requested: Sudarshan5353 / Arambh5353)
+    const passwordHash = await bcrypt.hash('Arambh5353', 10);
 
     const sudarshanUser = await User.create({
       name: 'Er. Sudarshan Bajrang Naik',
+      username: 'Sudarshan5353',
       email: 'arambhconstruction9977@gmail.com',
       passwordHash,
       role: 'ROLE_ADMIN',
       phone: '+917796853434',
       status: 'ACTIVE',
+      securityQuestion: 'Primary Master Security PIN',
+      securityAnswer: '5353',
     });
 
     // Secondary login for quick access
     await User.create({
       name: 'Er. Sudarshan Naik (Admin)',
+      username: 'admin',
       email: 'admin@arambh.com',
       passwordHash,
       role: 'ROLE_ADMIN',
       phone: '+917796853434',
       status: 'ACTIVE',
+      securityQuestion: 'Primary Master Security PIN',
+      securityAnswer: '5353',
     });
 
     // 3. Work Types
@@ -764,7 +787,237 @@ export async function seedDatabase(forceRefresh = true) {
       createdBy: sudarshanUser._id,
     });
 
-    // 11. Initial Notifications
+    // 11. Seed Full Work Schedules for Projects (Phase 1 to 26 Complete Pipeline)
+    console.log('Seeding Work Schedule activities & labor tracking records...');
+    const now = new Date();
+
+    // Helper to add days
+    const addDays = (d: Date, days: number) => {
+      const copy = new Date(d);
+      copy.setDate(copy.getDate() + days);
+      return copy;
+    };
+
+    // Seed Patil Residence (proj5) with realistic construction stages
+    const p5BaseDate = new Date('2024-09-01');
+    const p5Schedules: any[] = [];
+
+    for (const act of DEFAULT_CONSTRUCTION_ACTIVITIES) {
+      const plannedStart = addDays(p5BaseDate, (act.order - 1) * 7);
+      const plannedEnd = addDays(plannedStart, 6);
+
+      let status: 'COMPLETED' | 'IN_PROGRESS' | 'SCHEDULED' | 'NOT_STARTED' = 'NOT_STARTED';
+      let progress = 0;
+      let actualStart: Date | undefined;
+      let actualEnd: Date | undefined;
+      let completedQty = 0;
+      let targetQty = act.order % 2 === 0 ? 450 : 1200;
+
+      if (act.order <= 19) {
+        // First 19 activities (Lineout up to Plumbing) are completed
+        status = 'COMPLETED';
+        progress = 100;
+        actualStart = plannedStart;
+        actualEnd = plannedEnd;
+        completedQty = targetQty;
+      } else if (act.order === 20 || act.order === 21) {
+        // Tile work & Putty in progress
+        status = 'IN_PROGRESS';
+        progress = act.order === 20 ? 80 : 45;
+        actualStart = plannedStart;
+        completedQty = Math.round(targetQty * (progress / 100));
+      } else if (act.order === 22) {
+        // Electric wiring scheduled
+        status = 'SCHEDULED';
+        progress = 0;
+      }
+
+      const schedule = await WorkSchedule.create({
+        projectId: proj5._id,
+        projectName: proj5.projectName,
+        siteId: site5._id,
+        siteName: site5.siteName,
+        workName: act.name,
+        workOrder: act.order,
+        description: act.shortDefinition,
+        plannedStartDate: plannedStart,
+        plannedEndDate: plannedEnd,
+        actualStartDate: actualStart,
+        actualEndDate: actualEnd,
+        status,
+        progressPercentage: progress,
+        priority: act.order <= 5 ? 'CRITICAL' : act.order <= 15 ? 'HIGH' : 'MEDIUM',
+        assignedTeam: act.order <= 15 ? 'Pandurang Naik Structural Crew' : 'Interior & Finishing Team',
+        assignedWorkerIds: [worker1._id, worker2._id],
+        targetQuantity: targetQty,
+        completedQuantity: completedQty,
+        unit: act.defaultUnit,
+        prerequisites: act.prerequisites,
+        remarks: `Stage ${act.order} as per Maharashtra PWD & RCC building bylaws.`,
+        createdBy: sudarshanUser._id,
+      });
+
+      p5Schedules.push(schedule);
+
+      // Seed progress update history for active and completed ones
+      if (progress > 0) {
+        await WorkProgressUpdate.create({
+          workScheduleId: schedule._id,
+          projectId: proj5._id,
+          previousProgress: 0,
+          newProgress: progress,
+          previousStatus: 'SCHEDULED',
+          newStatus: status,
+          remarks: `Inspection conducted by Er. Sudarshan Bajrang Naik. Criteria satisfied: ${act.completionCriteria[0]}`,
+          updatedBy: 'Er. Sudarshan Bajrang Naik',
+          updatedById: sudarshanUser._id,
+        });
+      }
+    }
+
+    // Seed Labor record for Tile Work (act 20) on Patil Residence
+    const tileSchedule = p5Schedules.find((s) => s.workOrder === 20);
+    if (tileSchedule) {
+      await WorkLaborRecord.create({
+        projectId: proj5._id,
+        workScheduleId: tileSchedule._id,
+        date: new Date('2025-02-27'),
+        workerTeam: 'Specialized Tile Laying Crew',
+        workers: [
+          { workerId: worker1._id, workerType: 'Lead Mason', count: 2, hours: 8, overtimeHours: 2 },
+          { workerId: worker4._id, workerType: 'Grouting Helper', count: 3, hours: 8, overtimeHours: 1 },
+        ],
+        totalWorkers: 5,
+        skilledWorkers: 2,
+        unskilledWorkers: 3,
+        regularHours: 40,
+        overtimeHours: 7,
+        totalLaborHours: 47,
+        supervisor: 'Er. Sudarshan Bajrang Naik',
+        shift: 'DAY',
+        estimatedLaborCost: 4850,
+        paymentStatus: 'PAID',
+        remarks: 'Master bedroom & kitchen platform 800x1600mm vitrified tiles laid with zero lippage.',
+        createdBy: 'Er. Sudarshan Bajrang Naik',
+      });
+
+      await WorkQuantityRecord.create({
+        projectId: proj5._id,
+        workScheduleId: tileSchedule._id,
+        date: new Date('2025-02-27'),
+        quantity: 350,
+        unit: 'Sq.ft',
+        workerTeam: 'Specialized Tile Laying Crew',
+        remarks: 'Living hall and dining vitrified flooring completed with epoxy spacers.',
+        createdBy: 'Er. Sudarshan Bajrang Naik',
+      });
+
+      // Sample work images
+      await WorkImage.create({
+        workScheduleId: tileSchedule._id,
+        projectId: proj5._id,
+        imageUrl: 'https://images.unsplash.com/photo-1581094794329-c8112a89af12?auto=format&fit=crop&w=1200&q=80',
+        caption: 'Floor base preparation and tile alignment grid',
+        imageType: 'BEFORE',
+        uploadedBy: 'Er. Sudarshan Bajrang Naik',
+      });
+
+      await WorkImage.create({
+        workScheduleId: tileSchedule._id,
+        projectId: proj5._id,
+        imageUrl: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80',
+        caption: 'Vitrified tiles laying with leveling clips in progress',
+        imageType: 'DURING',
+        uploadedBy: 'Er. Sudarshan Bajrang Naik',
+      });
+    }
+
+    // Seed Work Schedule for Project 2: Grampanchayat Complex (G+1 Sabhagruh)
+    const p2BaseDate = new Date('2024-10-01');
+    for (const act of DEFAULT_CONSTRUCTION_ACTIVITIES.slice(0, 16)) {
+      const plannedStart = addDays(p2BaseDate, (act.order - 1) * 9);
+      const plannedEnd = addDays(plannedStart, 8);
+
+      let status: 'COMPLETED' | 'IN_PROGRESS' | 'SCHEDULED' | 'NOT_STARTED' = 'NOT_STARTED';
+      let progress = 0;
+      if (act.order <= 14) {
+        status = 'COMPLETED';
+        progress = 100;
+      } else if (act.order === 15) {
+        status = 'IN_PROGRESS';
+        progress = 70;
+      } else if (act.order === 16) {
+        status = 'SCHEDULED';
+        progress = 15;
+      }
+
+      await WorkSchedule.create({
+        projectId: proj2._id,
+        projectName: proj2.projectName,
+        siteId: site2._id,
+        siteName: site2.siteName,
+        workName: act.name,
+        workOrder: act.order,
+        description: act.shortDefinition,
+        plannedStartDate: plannedStart,
+        plannedEndDate: plannedEnd,
+        actualStartDate: progress > 0 ? plannedStart : undefined,
+        actualEndDate: progress === 100 ? plannedEnd : undefined,
+        status,
+        progressPercentage: progress,
+        priority: 'HIGH',
+        assignedTeam: 'Government PWD Civil Contracting Crew',
+        targetQuantity: 1500,
+        completedQuantity: Math.round(1500 * (progress / 100)),
+        unit: act.defaultUnit,
+        prerequisites: act.prerequisites,
+        createdBy: sudarshanUser._id,
+      });
+    }
+
+    // Seed Work Schedule for Project 4: Naik Prime Commercial Complex
+    const p4BaseDate = new Date('2024-11-15');
+    for (const act of DEFAULT_CONSTRUCTION_ACTIVITIES.slice(0, 14)) {
+      const plannedStart = addDays(p4BaseDate, (act.order - 1) * 8);
+      const plannedEnd = addDays(plannedStart, 7);
+
+      let status: 'COMPLETED' | 'IN_PROGRESS' | 'SCHEDULED' | 'NOT_STARTED' = 'NOT_STARTED';
+      let progress = 0;
+      if (act.order <= 10) {
+        status = 'COMPLETED';
+        progress = 100;
+      } else if (act.order === 11) {
+        status = 'IN_PROGRESS';
+        progress = 60;
+      } else {
+        status = 'SCHEDULED';
+      }
+
+      await WorkSchedule.create({
+        projectId: proj4._id,
+        projectName: proj4.projectName,
+        siteId: site4._id,
+        siteName: site4.siteName,
+        workName: act.name,
+        workOrder: act.order,
+        description: act.shortDefinition,
+        plannedStartDate: plannedStart,
+        plannedEndDate: plannedEnd,
+        actualStartDate: progress > 0 ? plannedStart : undefined,
+        actualEndDate: progress === 100 ? plannedEnd : undefined,
+        status,
+        progressPercentage: progress,
+        priority: 'CRITICAL',
+        assignedTeam: 'Commercial RCC Framework Team',
+        targetQuantity: 2000,
+        completedQuantity: Math.round(2000 * (progress / 100)),
+        unit: act.defaultUnit,
+        prerequisites: act.prerequisites,
+        createdBy: sudarshanUser._id,
+      });
+    }
+
+    // 12. Initial Notifications
     await Notification.create({
       title: 'PWD RA Bill-2 Cleared & Credited',
       message: '₹14,00,000 credited via Treasury RTGS for Shengaon-Kadgaon Road Box Culvert project.',

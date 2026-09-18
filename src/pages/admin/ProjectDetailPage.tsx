@@ -28,6 +28,8 @@ import { Project, Site, UnifiedPayment } from '../../types.ts';
 import { formatCurrency, formatDate, getStatusBadgeClass } from '../../utils/formatters.ts';
 import { ReceivePaymentModal } from '../../components/payments/ReceivePaymentModal.tsx';
 import { PaymentDrawer } from '../../components/payments/PaymentDrawer.tsx';
+import { ProjectWorkScheduleTab } from '../../components/workSchedule/ProjectWorkScheduleTab.tsx';
+import { CalendarCheck } from 'lucide-react';
 
 export function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -173,6 +175,7 @@ export function ProjectDetailPage() {
 
   const tabs = [
     { key: 'payments', label: 'Financial Ledger & Receipts', icon: Receipt },
+    { key: 'schedule', label: 'Work Schedule (26 Stages)', icon: CalendarCheck },
     { key: 'sites', label: `Sites & Plots (${sites.length})`, icon: Layers },
     { key: 'worklogs', label: `Daily Labor (${workLogs.length})`, icon: HardHat },
     { key: 'expenses', label: `Direct Expenses (${expenses.length})`, icon: Banknote },
@@ -432,6 +435,15 @@ export function ProjectDetailPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Tab: Work Schedule */}
+      {currentTab === 'schedule' && (
+        <ProjectWorkScheduleTab
+          projectId={project._id}
+          projectName={project.projectName}
+          sites={sites}
+        />
       )}
 
       {/* Tab 2: Sites & Plots */}

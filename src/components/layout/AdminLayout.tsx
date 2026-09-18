@@ -18,6 +18,7 @@ import {
   Bell,
   History,
   Settings,
+  CalendarCheck,
   Search,
   Plus,
   LogOut,
@@ -25,14 +26,14 @@ import {
   ChevronDown,
   Menu,
   X,
-  Compass,
-  Globe,
-  Database,
+  Key,
+  ShieldCheck,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.tsx';
 import api from '../../services/api.ts';
 import { GlobalSearchModal } from '../search/GlobalSearchModal.tsx';
 import { ReceivePaymentModal } from '../payments/ReceivePaymentModal.tsx';
+import { AdminCredentialsModal } from '../admin/AdminCredentialsModal.tsx';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -59,6 +60,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
   const [searchOpen, setSearchOpen] = useState<boolean>(false);
   const [paymentModalOpen, setPaymentModalOpen] = useState<boolean>(false);
+  const [credentialsModalOpen, setCredentialsModalOpen] = useState<boolean>(false);
   const [unreadCount, setUnreadCount] = useState<number>(0);
 
   useEffect(() => {
@@ -95,6 +97,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       title: 'CORE MANAGEMENT',
       items: [
         { label: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
+        { label: 'Work Schedule', path: '/admin/work-schedules', icon: CalendarCheck, highlight: true },
         { label: 'Projects', path: '/admin/projects', icon: Building2 },
         { label: 'Sites & Plots', path: '/admin/sites', icon: MapPin },
       ],
@@ -124,14 +127,6 @@ export function AdminLayout({ children }: AdminLayoutProps) {
         { label: 'Inventory Audit', path: '/admin/inventory', icon: Boxes },
         { label: 'Vendors Directory', path: '/admin/vendors', icon: Truck },
         { label: 'Vendor Settlements', path: '/admin/vendor-payments', icon: CreditCard },
-      ],
-    },
-    {
-      title: 'GOOGLE CLOUD & WORKSPACE',
-      items: [
-        { label: 'Site GIS & Live Maps', path: '/admin/maps', icon: Compass, highlight: true },
-        { label: 'Google Workspace Hub', path: '/admin/workspace', icon: Globe },
-        { label: 'Cloud SQL & Firebase', path: '/admin/cloud-db', icon: Database },
       ],
     },
     {
@@ -241,23 +236,33 @@ export function AdminLayout({ children }: AdminLayoutProps) {
         </nav>
 
         {/* User Card & Logout */}
-        <div className="p-3.5 border-t border-slate-800/80 bg-slate-900/90 flex items-center justify-between">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-amber-400 text-xs shrink-0">
-              {user?.name?.charAt(0) || 'A'}
+        {/* Sidebar Footer User Info */}
+        <div className="p-3 border-t border-slate-800/80 bg-slate-900/90 flex items-center justify-between gap-1">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center font-bold text-amber-400 text-xs shrink-0">
+              {user?.name?.charAt(0) || 'S'}
             </div>
             <div className="min-w-0">
-              <div className="text-xs font-bold text-white truncate">{user?.name || 'Administrator'}</div>
-              <div className="text-[10px] text-amber-400/80 font-mono truncate">Role: ADMIN</div>
+              <div className="text-xs font-bold text-white truncate">{user?.name || 'Er. Sudarshan Naik'}</div>
+              <div className="text-[10px] text-amber-400/90 font-mono truncate">@{user?.username || 'Sudarshan5353'}</div>
             </div>
           </div>
-          <button
-            onClick={logout}
-            title="Sign Out"
-            className="p-1.5 text-slate-400 hover:text-rose-400 rounded-lg hover:bg-slate-800 transition-colors"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-0.5 shrink-0">
+            <button
+              onClick={() => setCredentialsModalOpen(true)}
+              title="Change Admin Password & Username"
+              className="p-1.5 text-slate-400 hover:text-amber-400 rounded-lg hover:bg-slate-800 transition-colors"
+            >
+              <Key className="w-4 h-4" />
+            </button>
+            <button
+              onClick={logout}
+              title="Sign Out"
+              className="p-1.5 text-slate-400 hover:text-rose-400 rounded-lg hover:bg-slate-800 transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -287,6 +292,16 @@ export function AdminLayout({ children }: AdminLayoutProps) {
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Quick Admin Security & Password button */}
+            <button
+              onClick={() => setCredentialsModalOpen(true)}
+              className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-amber-400 bg-slate-800/80 hover:bg-slate-800 rounded-xl border border-slate-700 transition-colors"
+              title="Manage Admin Username & Password"
+            >
+              <Key className="w-3.5 h-3.5 text-amber-400" />
+              <span>Login Security</span>
+            </button>
+
             {/* View Public Portal */}
             <Link
               to="/"
@@ -328,6 +343,12 @@ export function AdminLayout({ children }: AdminLayoutProps) {
 
       {/* Global Search Modal */}
       <GlobalSearchModal isOpen={searchOpen} onClose={() => setSearchOpen(false)} />
+
+      {/* Admin Username & Password Modal */}
+      <AdminCredentialsModal
+        isOpen={credentialsModalOpen}
+        onClose={() => setCredentialsModalOpen(false)}
+      />
 
       {/* Quick Receive Payment Modal */}
       <ReceivePaymentModal

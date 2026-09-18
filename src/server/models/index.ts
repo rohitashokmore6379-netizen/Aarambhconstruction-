@@ -6,10 +6,15 @@ import mongoose, { Schema, Document, Types } from 'mongoose';
 export interface IUser extends Document {
   name: string;
   email: string;
+  username?: string;
   passwordHash: string;
   role: 'ROLE_ADMIN' | 'ROLE_STAFF';
   phone?: string;
   status: 'ACTIVE' | 'INACTIVE';
+  resetOtp?: string;
+  resetOtpExpiry?: Date;
+  securityQuestion?: string;
+  securityAnswer?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -18,10 +23,15 @@ const UserSchema = new Schema<IUser>(
   {
     name: { type: String, required: true, trim: true },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    username: { type: String, trim: true, index: true },
     passwordHash: { type: String, required: true },
     role: { type: String, enum: ['ROLE_ADMIN', 'ROLE_STAFF'], default: 'ROLE_ADMIN' },
     phone: { type: String, trim: true },
     status: { type: String, enum: ['ACTIVE', 'INACTIVE'], default: 'ACTIVE' },
+    resetOtp: { type: String, trim: true },
+    resetOtpExpiry: { type: Date },
+    securityQuestion: { type: String, trim: true },
+    securityAnswer: { type: String, trim: true },
   },
   { timestamps: true }
 );
@@ -785,3 +795,7 @@ export const Inquiry = mongoose.model<IInquiry>('Inquiry', InquirySchema);
 export const Notification = mongoose.model<INotification>('Notification', NotificationSchema);
 export const AuditLog = mongoose.model<IAuditLog>('AuditLog', AuditLogSchema);
 export const CompanySettings = mongoose.model<ICompanySettings>('CompanySettings', CompanySettingsSchema);
+
+// Re-export Work Schedule & Labor models
+export * from './workSchedule.ts';
+

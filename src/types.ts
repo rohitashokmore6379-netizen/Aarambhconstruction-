@@ -1,9 +1,11 @@
 export interface User {
   id: string;
   name: string;
+  username?: string;
   email: string;
   role: 'ROLE_ADMIN' | 'ROLE_STAFF';
   phone?: string;
+  securityQuestion?: string;
 }
 
 export interface ProjectFinancials {
@@ -395,3 +397,115 @@ export interface DashboardData {
   recentTransactions: any[];
   lowStockMaterials: any[];
 }
+
+export type WorkScheduleStatus =
+  | 'NOT_STARTED'
+  | 'SCHEDULED'
+  | 'IN_PROGRESS'
+  | 'ON_HOLD'
+  | 'COMPLETED'
+  | 'DELAYED'
+  | 'CANCELLED';
+
+export type WorkPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+export interface WorkScheduleItem {
+  _id: string;
+  projectId: any;
+  projectName?: string;
+  siteId?: any;
+  siteName?: string;
+  workName: string;
+  workOrder: number;
+  description?: string;
+  plannedStartDate: string;
+  plannedEndDate: string;
+  actualStartDate?: string;
+  actualEndDate?: string;
+  status: WorkScheduleStatus;
+  progressPercentage: number;
+  priority: WorkPriority;
+  assignedTeam?: string;
+  assignedWorkerIds?: any[];
+  targetQuantity?: number;
+  completedQuantity?: number;
+  unit?: string;
+  remarks?: string;
+  prerequisites?: string[];
+  completionRemarks?: string;
+  confirmedCompletedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  images?: WorkImageItem[];
+  laborRecords?: WorkLaborItem[];
+  quantityRecords?: WorkQuantityItem[];
+  history?: WorkProgressHistoryItem[];
+}
+
+export interface WorkImageItem {
+  _id: string;
+  workScheduleId: string;
+  projectId: string;
+  imageUrl: string;
+  caption?: string;
+  imageType: 'BEFORE' | 'DURING' | 'COMPLETED';
+  uploadedBy?: string;
+  uploadedAt: string;
+}
+
+export interface WorkLaborWorkerSubItem {
+  workerId?: any;
+  workerType: string;
+  count: number;
+  hours: number;
+  overtimeHours: number;
+}
+
+export interface WorkLaborItem {
+  _id: string;
+  projectId: string;
+  workScheduleId: string;
+  date: string;
+  workerTeam?: string;
+  workers: WorkLaborWorkerSubItem[];
+  totalWorkers: number;
+  skilledWorkers: number;
+  unskilledWorkers: number;
+  regularHours: number;
+  overtimeHours: number;
+  totalLaborHours: number;
+  supervisor?: string;
+  shift: 'DAY' | 'NIGHT' | 'OVERTIME';
+  remarks?: string;
+  estimatedLaborCost?: number;
+  paymentStatus: 'UNPAID' | 'PARTIALLY_PAID' | 'PAID';
+  createdBy?: string;
+  createdAt: string;
+}
+
+export interface WorkQuantityItem {
+  _id: string;
+  projectId: string;
+  workScheduleId: string;
+  date: string;
+  quantity: number;
+  unit: string;
+  workerTeam?: string;
+  remarks?: string;
+  createdBy?: string;
+  createdAt: string;
+}
+
+export interface WorkProgressHistoryItem {
+  _id: string;
+  workScheduleId: string;
+  projectId: string;
+  previousProgress: number;
+  newProgress: number;
+  previousStatus: string;
+  newStatus: string;
+  remarks?: string;
+  updatedBy: string;
+  createdAt: string;
+}
+

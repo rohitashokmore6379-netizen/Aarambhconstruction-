@@ -16,6 +16,7 @@ import * as searchCtrl from '../controllers/searchController.ts';
 import * as notificationCtrl from '../controllers/notificationController.ts';
 import * as auditCtrl from '../controllers/auditController.ts';
 import * as settingsCtrl from '../controllers/settingsController.ts';
+import * as workScheduleCtrl from '../controllers/workScheduleController.ts';
 
 const router = Router();
 
@@ -24,6 +25,8 @@ const router = Router();
 // ==========================================
 router.post('/auth/login', authCtrl.login);
 router.get('/auth/me', authenticate, authCtrl.getMe);
+router.post('/auth/forgot-password/request', authCtrl.forgotPasswordRequest);
+router.post('/auth/forgot-password/reset', authCtrl.forgotPasswordReset);
 
 router.get('/public/projects', publicCtrl.getPublicProjects);
 router.get('/public/projects/:id', publicCtrl.getPublicProjectById);
@@ -34,6 +37,11 @@ router.post('/public/inquiry', publicCtrl.submitInquiry);
 // ==========================================
 const admin = Router();
 admin.use(authenticate, requireAdmin);
+
+// Admin Profile & Security Credentials
+admin.get('/profile', authCtrl.getMe);
+admin.put('/profile', authCtrl.updateAdminProfile);
+admin.put('/change-password', authCtrl.changeAdminPassword);
 
 // Dashboard & Analytics
 admin.get('/dashboard', dashboardCtrl.getDashboardMetrics);
@@ -125,6 +133,23 @@ admin.put('/company-settings', settingsCtrl.updateCompanySettings);
 admin.post('/company-settings/reset', settingsCtrl.resetData);
 admin.get('/documents', settingsCtrl.getDocuments);
 admin.post('/documents', settingsCtrl.createDocument);
+
+// ==========================================
+// WORK SCHEDULE MODULE ROUTES
+// ==========================================
+admin.get('/work-schedules/activities-template', workScheduleCtrl.getPredefinedActivities);
+admin.get('/work-schedules/metrics', workScheduleCtrl.getScheduleMetrics);
+admin.post('/work-schedules/initialize', workScheduleCtrl.initializeProjectSchedule);
+admin.get('/work-schedules', workScheduleCtrl.getWorkSchedules);
+admin.post('/work-schedules', workScheduleCtrl.createWorkSchedule);
+admin.get('/work-schedules/:id', workScheduleCtrl.getWorkScheduleById);
+admin.put('/work-schedules/:id', workScheduleCtrl.updateWorkSchedule);
+admin.delete('/work-schedules/:id', workScheduleCtrl.deleteWorkSchedule);
+admin.patch('/work-schedules/:id/progress', workScheduleCtrl.updateWorkProgress);
+admin.post('/work-schedules/:id/confirm-completion', workScheduleCtrl.confirmWorkCompletion);
+admin.post('/work-schedules/:id/images', workScheduleCtrl.addWorkImage);
+admin.post('/work-schedules/:id/quantity', workScheduleCtrl.logWorkQuantity);
+admin.post('/work-schedules/:id/labor', workScheduleCtrl.logWorkLabor);
 
 router.use('/admin', admin);
 

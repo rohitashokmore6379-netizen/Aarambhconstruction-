@@ -10,6 +10,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (email: string, pass: string) => Promise<{ success: boolean; message?: string }>;
   logout: () => void;
+  updateCurrentUser: (userData: Partial<User>) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -78,6 +79,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.location.href = '/admin/login';
   };
 
+  const updateCurrentUser = (userData: Partial<User>) => {
+    setUser((prev) => {
+      if (!prev) return null;
+      const updated = { ...prev, ...userData };
+      localStorage.setItem('arambh_user', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
   const isAuthenticated = !!token && !!user;
   const isAdmin = user?.role === 'ROLE_ADMIN';
 
@@ -91,6 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         login,
         logout,
+        updateCurrentUser,
       }}
     >
       {children}

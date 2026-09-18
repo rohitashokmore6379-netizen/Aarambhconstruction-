@@ -16,6 +16,7 @@ import { ContactPage } from './pages/public/ContactPage.tsx';
 // Admin Pages
 import { LoginPage } from './pages/admin/LoginPage.tsx';
 import { DashboardPage } from './pages/admin/DashboardPage.tsx';
+import { WorkSchedulePage } from './pages/admin/WorkSchedulePage.tsx';
 import { ProjectsListPage } from './pages/admin/ProjectsListPage.tsx';
 import { ProjectDetailPage } from './pages/admin/ProjectDetailPage.tsx';
 import { SitesPage } from './pages/admin/SitesPage.tsx';
@@ -32,9 +33,6 @@ import { VendorsPage } from './pages/admin/VendorsPage.tsx';
 import { AuditLogsPage } from './pages/admin/AuditLogsPage.tsx';
 import { NotificationsPage } from './pages/admin/NotificationsPage.tsx';
 import { CompanySettingsPage } from './pages/admin/CompanySettingsPage.tsx';
-import { GoogleMapsPage } from './pages/admin/GoogleMapsPage.tsx';
-import { GoogleWorkspacePage } from './pages/admin/GoogleWorkspacePage.tsx';
-import { CloudDatabasePage } from './pages/admin/CloudDatabasePage.tsx';
 
 // Protected Route Guard
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -116,6 +114,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <DashboardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/work-schedules"
+            element={
+              <ProtectedRoute>
+                <WorkSchedulePage />
               </ProtectedRoute>
             }
           />
@@ -260,30 +266,6 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <CompanySettingsPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/maps"
-            element={
-              <ProtectedRoute>
-                <GoogleMapsPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/workspace"
-            element={
-              <ProtectedRoute>
-                <GoogleWorkspacePage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/cloud-db"
-            element={
-              <ProtectedRoute>
-                <CloudDatabasePage />
               </ProtectedRoute>
             }
           />
