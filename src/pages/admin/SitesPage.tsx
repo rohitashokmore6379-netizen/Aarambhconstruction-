@@ -1,15 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Layers, Plus, Search, Building2, MapPin, IndianRupee, X } from 'lucide-react';
+import { Layers, Plus, Search, Building2, MapPin, IndianRupee, X, QrCode } from 'lucide-react';
 import api from '../../services/api.ts';
 import { Site, Project } from '../../types.ts';
 import { formatCurrency, getStatusBadgeClass } from '../../utils/formatters.ts';
+import { SiteQRCodeModal } from '../../components/common/SiteQRCodeModal.tsx';
 
 export function SitesPage() {
   const [sites, setSites] = useState<Site[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchTerm, setSearchTerm] = useState<string>('');
+
+  // Site QR Code Modal
+  const [qrSite, setQrSite] = useState<Site | null>(null);
 
   // Add Site Modal
   const [modalOpen, setModalOpen] = useState<boolean>(false);
@@ -158,14 +162,23 @@ export function SitesPage() {
                 </div>
               </div>
 
-              <div className="pt-3 border-t border-slate-800 flex justify-between items-center text-xs">
-                <span className="text-slate-500">Active Unit</span>
+              <div className="pt-3 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setQrSite(site)}
+                  className="px-2.5 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 hover:text-amber-300 border border-amber-500/30 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm"
+                  title="Generate Site QR Code Placard"
+                >
+                  <QrCode className="w-3.5 h-3.5" />
+                  <span>Site QR Code</span>
+                </button>
+
                 {typeof site.projectId === 'object' && (
                   <Link
                     to={`/admin/projects/${site.projectId?._id}?tab=sites`}
-                    className="text-amber-400 hover:text-amber-300 font-bold"
+                    className="text-slate-400 hover:text-amber-400 font-medium transition-colors"
                   >
-                    View Project Cockpit →
+                    Cockpit →
                   </Link>
                 )}
               </div>
@@ -173,6 +186,13 @@ export function SitesPage() {
           ))}
         </div>
       )}
+
+      {/* Site QR Code Modal */}
+      <SiteQRCodeModal
+        site={qrSite}
+        isOpen={Boolean(qrSite)}
+        onClose={() => setQrSite(null)}
+      />
 
       {/* Add Modal */}
       {modalOpen && (

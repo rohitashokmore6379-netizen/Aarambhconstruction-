@@ -8,13 +8,31 @@ import {
   Project,
   Site,
   Worker,
+  WorkActivityDefinition,
 } from '../models/index.ts';
 import { DEFAULT_CONSTRUCTION_ACTIVITIES } from '../../data/constructionActivities.ts';
 import { createAuditLog } from '../services/auditService.ts';
 
-// 1. Get Predefined 26 Activity Template Master List
+// 1. Get Predefined Activity Template Master List
 export async function getPredefinedActivities(req: Request, res: Response) {
   try {
+    const definitions = await WorkActivityDefinition.find({ status: 'ACTIVE' }).sort({ order: 1 });
+    if (definitions.length > 0) {
+      const mapped = definitions.map((d) => ({
+        order: d.order,
+        name: d.name,
+        category: d.category,
+        shortDefinition: d.definition,
+        completionCriteria: d.completionCriteria,
+        defaultUnit: d.unit,
+        estimatedDurationDays: d.standardDurationDays,
+      }));
+      return res.json({
+        success: true,
+        data: mapped,
+      });
+    }
+
     return res.json({
       success: true,
       data: DEFAULT_CONSTRUCTION_ACTIVITIES,
@@ -54,14 +72,45 @@ export async function initializeProjectSchedule(req: Request, res: Response) {
     }
 
     const baseDate = startDate ? new Date(startDate) : new Date();
-    const createdSchedules = [];
+    const createdSchedules: any[] = [];
 
-    for (const act of DEFAULT_CONSTRUCTION_ACTIVITIES) {
+    interface NormalizedActivity {
+      order: number;
+      name: string;
+      shortDefinition: string;
+      defaultUnit: string;
+      durationDays: number;
+      prerequisites: string[];
+    }
+
+    // Check if custom WorkActivityDefinitions exist
+    const dynamicDefs = await WorkActivityDefinition.find({ status: 'ACTIVE' }).sort({ order: 1 });
+    const activitiesToUse: NormalizedActivity[] =
+      dynamicDefs.length > 0
+        ? dynamicDefs.map((d) => ({
+            order: d.order,
+            name: d.name,
+            shortDefinition: d.definition,
+            defaultUnit: d.unit,
+            durationDays: d.standardDurationDays || durationPerActivityDays,
+            prerequisites: [] as string[],
+          }))
+        : DEFAULT_CONSTRUCTION_ACTIVITIES.map((act) => ({
+            order: act.order,
+            name: act.name,
+            shortDefinition: act.shortDefinition,
+            defaultUnit: act.defaultUnit,
+            durationDays: durationPerActivityDays,
+            prerequisites: act.prerequisites || [],
+          }));
+
+    for (const act of activitiesToUse) {
+      const duration = act.durationDays || durationPerActivityDays;
       const plannedStart = new Date(baseDate);
-      plannedStart.setDate(plannedStart.getDate() + (act.order - 1) * durationPerActivityDays);
+      plannedStart.setDate(plannedStart.getDate() + (act.order - 1) * duration);
 
       const plannedEnd = new Date(plannedStart);
-      plannedEnd.setDate(plannedEnd.getDate() + (durationPerActivityDays - 1));
+      plannedEnd.setDate(plannedEnd.getDate() + (duration - 1));
 
       const schedule = await WorkSchedule.create({
         projectId: project._id,
@@ -79,7 +128,7 @@ export async function initializeProjectSchedule(req: Request, res: Response) {
         unit: act.defaultUnit,
         targetQuantity: 0,
         completedQuantity: 0,
-        prerequisites: act.prerequisites,
+        prerequisites: act.prerequisites || [],
         createdBy: (req as any).user?._id,
       });
 

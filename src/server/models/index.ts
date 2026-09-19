@@ -196,8 +196,9 @@ export interface IWorker extends Document {
   phone: string;
   address?: string;
   role: string;
-  skill: 'MISTRI' | 'MASON' | 'CARPENTER' | 'BAR_BENDER' | 'HELPER' | 'ELECTRICIAN' | 'PLUMBER' | 'PAINTER' | 'OTHER';
+  skill: string;
   dailyWageRate: number;
+  dailyRate?: number;
   joiningDate: Date;
   status: 'ACTIVE' | 'INACTIVE';
   photo?: string;
@@ -210,15 +211,16 @@ const WorkerSchema = new Schema<IWorker>(
   {
     workerCode: { type: String, required: true, unique: true, uppercase: true, trim: true },
     name: { type: String, required: true, trim: true, index: true },
-    phone: { type: String, required: true, trim: true },
+    phone: { type: String, default: '-', trim: true },
     address: { type: String },
     role: { type: String, default: 'Construction Worker' },
     skill: {
       type: String,
-      enum: ['MISTRI', 'MASON', 'CARPENTER', 'BAR_BENDER', 'HELPER', 'ELECTRICIAN', 'PLUMBER', 'PAINTER', 'OTHER'],
       default: 'MASON',
+      trim: true,
     },
     dailyWageRate: { type: Number, default: 600, min: 0 },
+    dailyRate: { type: Number, default: 600, min: 0 },
     joiningDate: { type: Date, default: Date.now },
     status: { type: String, enum: ['ACTIVE', 'INACTIVE'], default: 'ACTIVE' },
     photo: { type: String },
@@ -798,4 +800,5 @@ export const CompanySettings = mongoose.model<ICompanySettings>('CompanySettings
 
 // Re-export Work Schedule & Labor models
 export * from './workSchedule.ts';
+export * from './workActivityDefinition.ts';
 

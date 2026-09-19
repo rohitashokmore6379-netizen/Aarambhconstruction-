@@ -212,12 +212,14 @@ export async function reverseVendorPayment(req: AuthRequest, res: Response) {
       action: 'VENDOR_PAYMENT_REVERSED',
       entityType: 'VendorPayment',
       entityId: payment._id.toString(),
-      projectId: payment.projectId.toString(),
+      projectId: payment.projectId ? payment.projectId.toString() : undefined,
       description: `Reversed vendor payment of ₹${payment.amount} (Receipt: ${payment.receiptNumber}). Reason: ${reason}`,
       ipAddress: req.ip,
     });
 
-    const updatedFinancials = await calculateProjectFinancials(payment.projectId.toString());
+    const updatedFinancials = payment.projectId
+      ? await calculateProjectFinancials(payment.projectId.toString())
+      : null;
 
     return res.json({
       success: true,

@@ -17,6 +17,7 @@ import * as notificationCtrl from '../controllers/notificationController.ts';
 import * as auditCtrl from '../controllers/auditController.ts';
 import * as settingsCtrl from '../controllers/settingsController.ts';
 import * as workScheduleCtrl from '../controllers/workScheduleController.ts';
+import * as workActivityDefCtrl from '../controllers/workActivityDefinitionController.ts';
 
 const router = Router();
 
@@ -150,6 +151,17 @@ admin.post('/work-schedules/:id/confirm-completion', workScheduleCtrl.confirmWor
 admin.post('/work-schedules/:id/images', workScheduleCtrl.addWorkImage);
 admin.post('/work-schedules/:id/quantity', workScheduleCtrl.logWorkQuantity);
 admin.post('/work-schedules/:id/labor', workScheduleCtrl.logWorkLabor);
+
+// ==========================================
+// WORK ACTIVITY DEFINITIONS (CONSTRUCTION TASK TEMPLATES)
+// ==========================================
+admin.get('/work-activity-definitions', workActivityDefCtrl.getWorkActivityDefinitions);
+admin.post('/work-activity-definitions', workActivityDefCtrl.createWorkActivityDefinition);
+admin.post('/work-activity-definitions/reorder', workActivityDefCtrl.reorderWorkActivityDefinitions);
+admin.post('/work-activity-definitions/seed', workActivityDefCtrl.seedWorkActivityDefinitions);
+admin.get('/work-activity-definitions/:id', workActivityDefCtrl.getWorkActivityDefinitionById);
+admin.put('/work-activity-definitions/:id', workActivityDefCtrl.updateWorkActivityDefinition);
+admin.delete('/work-activity-definitions/:id', workActivityDefCtrl.deleteWorkActivityDefinition);
 
 router.use('/admin', admin);
 

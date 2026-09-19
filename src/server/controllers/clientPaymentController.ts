@@ -212,7 +212,7 @@ export async function reverseClientPayment(req: AuthRequest, res: Response) {
 
     // Recalculate project and site financials
     const updatedProjectFinancials = await calculateProjectFinancials(payment.projectId.toString());
-    const updatedSiteFinancials = await calculateSiteFinancials(payment.siteId.toString());
+    const updatedSiteFinancials = payment.siteId ? await calculateSiteFinancials(payment.siteId.toString()) : null;
 
     await createAuditLog({
       userId: req.user?.id,

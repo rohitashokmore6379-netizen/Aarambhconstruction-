@@ -28,6 +28,7 @@ import {
   X,
   Key,
   ShieldCheck,
+  Layers,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.tsx';
 import api from '../../services/api.ts';
@@ -98,6 +99,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       items: [
         { label: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
         { label: 'Work Schedule', path: '/admin/work-schedules', icon: CalendarCheck, highlight: true },
+        { label: 'Task Templates', path: '/admin/activity-definitions', icon: Layers },
         { label: 'Projects', path: '/admin/projects', icon: Building2 },
         { label: 'Sites & Plots', path: '/admin/sites', icon: MapPin },
       ],

@@ -38,14 +38,19 @@ export async function createWorker(req: AuthRequest, res: Response) {
       workerCode = `WRK-${100 + count + 1}-${Date.now().toString().slice(-4)}`;
     }
 
+    const wageRate = Number(req.body.dailyRate || dailyWageRate) || 800;
+    const cleanPhone = phone && String(phone).trim() ? String(phone).trim() : '-';
+    const cleanSkill = String(skill || 'Mason / Mistri').trim();
+
     const worker = await Worker.create({
       workerCode,
       name: String(name).trim(),
-      phone: phone ? String(phone).trim() : '-',
+      phone: cleanPhone,
       address: address || '',
       role: role || 'Construction Worker',
-      skill: skill || 'MASON',
-      dailyWageRate: Number(dailyWageRate) || 600,
+      skill: cleanSkill,
+      dailyWageRate: wageRate,
+      dailyRate: wageRate,
       joiningDate: joiningDate ? new Date(joiningDate) : new Date(),
       status: 'ACTIVE',
       notes,
@@ -312,12 +317,14 @@ export async function reverseWorkerPayment(req: AuthRequest, res: Response) {
       action: 'WORKER_PAYMENT_REVERSED',
       entityType: 'WorkerPayment',
       entityId: payment._id.toString(),
-      projectId: payment.projectId.toString(),
+      projectId: payment.projectId ? payment.projectId.toString() : undefined,
       description: `Reversed worker wage payment of ₹${payment.amount}. Reason: ${reason}`,
       ipAddress: req.ip,
     });
 
-    const updatedFinancials = await calculateProjectFinancials(payment.projectId.toString());
+    const updatedFinancials = payment.projectId
+      ? await calculateProjectFinancials(payment.projectId.toString())
+      : null;
 
     return res.json({
       success: true,

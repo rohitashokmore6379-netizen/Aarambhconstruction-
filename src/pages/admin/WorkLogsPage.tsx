@@ -1,15 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { HardHat, Plus, Search, Calendar, Filter, ArrowRight, IndianRupee, X } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { HardHat, Plus, Search, Calendar, Filter, ArrowRight, IndianRupee, X, QrCode, Sparkles, Building2, MapPin, CheckCircle2 } from 'lucide-react';
 import api from '../../services/api.ts';
 import { WorkLog, Worker, Project, Site } from '../../types.ts';
 import { formatCurrency, formatDate } from '../../utils/formatters.ts';
+import { QRScannerModal } from '../../components/common/QRScannerModal.tsx';
 
 export function WorkLogsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const querySiteId = searchParams.get('siteId') || '';
+  const queryProjectId = searchParams.get('projectId') || '';
+  const autoOpenParam = searchParams.get('autoOpen');
+
   const [workLogs, setWorkLogs] = useState<WorkLog[]>([]);
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+
+  // Scanner modal
+  const [scannerOpen, setScannerOpen] = useState<boolean>(false);
+  const [isQrPrepopulated, setIsQrPrepopulated] = useState<boolean>(false);
 
   // Add Log Modal
   const [addModalOpen, setAddModalOpen] = useState<boolean>(false);
@@ -40,17 +51,37 @@ export function WorkLogsPage() {
           setDailyRate(String(workRes.data.data[0].dailyRate || 850));
         }
       }
-      if (projRes.data.success) {
-        setProjects(projRes.data.data);
-        if (projRes.data.data.length > 0) {
-          setSelectedProjectId(projRes.data.data[0]._id);
+
+      const loadedProjects: Project[] = projRes.data.success ? projRes.data.data : [];
+      const loadedSites: Site[] = siteRes.data.success ? siteRes.data.data : [];
+      setProjects(loadedProjects);
+      setSites(loadedSites);
+
+      // Check if URL contains pre-populated siteId or projectId from QR code scan
+      if (querySiteId) {
+        setSelectedSiteId(querySiteId);
+        setIsQrPrepopulated(true);
+
+        if (queryProjectId) {
+          setSelectedProjectId(queryProjectId);
+        } else {
+          const matched = loadedSites.find((s) => s._id === querySiteId);
+          if (matched) {
+            const pId =
+              typeof matched.projectId === 'object' && matched.projectId
+                ? matched.projectId._id
+                : (matched.projectId as string);
+            if (pId) setSelectedProjectId(pId);
+          }
         }
-      }
-      if (siteRes.data.success) {
-        setSites(siteRes.data.data);
-        if (siteRes.data.data.length > 0) {
-          setSelectedSiteId(siteRes.data.data[0]._id);
+
+        // Automatically open the muster creation modal when scanned
+        if (autoOpenParam !== '0') {
+          setAddModalOpen(true);
         }
+      } else {
+        if (loadedProjects.length > 0) setSelectedProjectId(loadedProjects[0]._id);
+        if (loadedSites.length > 0) setSelectedSiteId(loadedSites[0]._id);
       }
     } catch (err) {
       console.error('Failed to load muster logs', err);
@@ -61,7 +92,7 @@ export function WorkLogsPage() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [querySiteId, queryProjectId]);
 
   const handleWorkerChange = (workerId: string) => {
     setSelectedWorkerId(workerId);
@@ -69,6 +100,21 @@ export function WorkLogsPage() {
     if (w && w.dailyRate) {
       setDailyRate(String(w.dailyRate));
     }
+  };
+
+  const handleSiteSelectFromScanner = (siteId: string, projectId: string) => {
+    setSelectedSiteId(siteId);
+    setIsQrPrepopulated(true);
+    if (projectId) {
+      setSelectedProjectId(projectId);
+    } else {
+      const s = sites.find((item) => item._id === siteId);
+      if (s) {
+        const p = typeof s.projectId === 'object' && s.projectId ? s.projectId._id : (s.projectId as string);
+        if (p) setSelectedProjectId(p);
+      }
+    }
+    setAddModalOpen(true);
   };
 
   const handleAddLog = async (e: React.FormEvent) => {
@@ -100,6 +146,9 @@ export function WorkLogsPage() {
 
   const totalMusterAmount = workLogs.reduce((acc, curr) => acc + (curr.amount || 0), 0);
 
+  const scannedSiteObj = sites.find((s) => s._id === (selectedSiteId || querySiteId));
+  const scannedProjectObj = projects.find((p) => p._id === selectedProjectId);
+
   return (
     <div className="space-y-6 pb-12">
       {/* Header */}
@@ -113,13 +162,25 @@ export function WorkLogsPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="text-right hidden sm:block">
+        <div className="flex items-center gap-2.5">
+          <div className="text-right hidden sm:block mr-2">
             <span className="text-[10px] text-slate-400 block uppercase">Total Accrued Muster</span>
             <span className="text-sm font-mono font-bold text-sky-400">{formatCurrency(totalMusterAmount)}</span>
           </div>
           <button
-            onClick={() => setAddModalOpen(true)}
+            type="button"
+            onClick={() => setScannerOpen(true)}
+            className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-colors"
+            title="Scan Site QR code"
+          >
+            <QrCode className="w-4 h-4 text-amber-400" />
+            <span>Scan Site QR</span>
+          </button>
+          <button
+            onClick={() => {
+              setIsQrPrepopulated(false);
+              setAddModalOpen(true);
+            }}
             className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-md shadow-amber-500/10"
           >
             <Plus className="w-4 h-4" />
@@ -127,6 +188,61 @@ export function WorkLogsPage() {
           </button>
         </div>
       </div>
+
+      {/* QR Code Scanned Site Banner */}
+      {querySiteId && scannedSiteObj && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-amber-500 text-slate-950 rounded-xl font-bold">
+              <QrCode className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-[11px] text-amber-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                <span>Site QR Scan Active</span>
+                <span className="px-1.5 py-0.2 bg-amber-500/20 text-amber-300 rounded text-[9px] font-extrabold">PRE-FILLED</span>
+              </div>
+              <p className="text-sm font-bold text-white mt-0.5 flex items-center gap-2">
+                <span>{scannedSiteObj.siteName}</span>
+                <span className="text-xs text-slate-400 font-normal">
+                  ({typeof scannedSiteObj.projectId === 'object' ? scannedSiteObj.projectId?.projectName : 'Parent Project'})
+                </span>
+                {scannedSiteObj.location && (
+                  <span className="text-xs text-slate-500 flex items-center gap-0.5 font-normal">
+                    <MapPin className="w-3 h-3 text-amber-500" /> {scannedSiteObj.location}
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedSiteId(scannedSiteObj._id);
+                setAddModalOpen(true);
+              }}
+              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Log Muster for this Site</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const p = new URLSearchParams(searchParams);
+                p.delete('siteId');
+                p.delete('projectId');
+                p.delete('autoOpen');
+                setSearchParams(p);
+                setIsQrPrepopulated(false);
+              }}
+              className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold"
+            >
+              Clear Filter
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Muster Table */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl shadow-xl overflow-hidden">
@@ -232,11 +348,32 @@ export function WorkLogsPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Site / Plot</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-slate-300 font-semibold">Site / Plot</label>
+                    {isQrPrepopulated && (
+                      <span className="text-[10px] text-amber-400 font-bold bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/30 flex items-center gap-1">
+                        <QrCode className="w-2.5 h-2.5" />
+                        <span>QR Pre-filled</span>
+                      </span>
+                    )}
+                  </div>
                   <select
                     value={selectedSiteId}
-                    onChange={(e) => setSelectedSiteId(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white"
+                    onChange={(e) => {
+                      const newSiteId = e.target.value;
+                      setSelectedSiteId(newSiteId);
+                      const targetSite = sites.find((s) => s._id === newSiteId);
+                      if (targetSite) {
+                        const pId =
+                          typeof targetSite.projectId === 'object' && targetSite.projectId
+                            ? targetSite.projectId._id
+                            : (targetSite.projectId as string);
+                        if (pId) setSelectedProjectId(pId);
+                      }
+                    }}
+                    className={`w-full px-3 py-2 bg-slate-950 border rounded-xl text-white ${
+                      isQrPrepopulated ? 'border-amber-500/60 ring-1 ring-amber-500/30' : 'border-slate-700'
+                    }`}
                   >
                     {sites.map((s) => (
                       <option key={s._id} value={s._id}>
@@ -319,6 +456,14 @@ export function WorkLogsPage() {
           </div>
         </div>
       )}
+
+      {/* QR Scanner / Quick Simulator Modal */}
+      <QRScannerModal
+        isOpen={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        sites={sites}
+        onSelectSite={handleSiteSelectFromScanner}
+      />
     </div>
   );
 }

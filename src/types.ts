@@ -509,3 +509,22 @@ export interface WorkProgressHistoryItem {
   createdAt: string;
 }
 
+export interface WorkActivityDefinition {
+  _id: string;
+  name: string;
+  order: number;
+  category: 'PRE_CONSTRUCTION' | 'SUBSTRUCTURE' | 'SUPERSTRUCTURE' | 'MEP_SERVICES' | 'FINISHING' | 'EXTERNAL_WORKS' | 'OTHER';
+  definition: string;
+  completionCriteria: string[];
+  unit: string;
+  standardDurationDays: number;
+  typicalTrades: string[];
+  safetyPrecautions: string[];
+  inspectionRequired: boolean;
+  isDefaultTemplate: boolean;
+  status: 'ACTIVE' | 'ARCHIVED';
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+

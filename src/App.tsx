@@ -17,6 +17,7 @@ import { ContactPage } from './pages/public/ContactPage.tsx';
 import { LoginPage } from './pages/admin/LoginPage.tsx';
 import { DashboardPage } from './pages/admin/DashboardPage.tsx';
 import { WorkSchedulePage } from './pages/admin/WorkSchedulePage.tsx';
+import { WorkActivityDefinitionsPage } from './pages/admin/WorkActivityDefinitionsPage.tsx';
 import { ProjectsListPage } from './pages/admin/ProjectsListPage.tsx';
 import { ProjectDetailPage } from './pages/admin/ProjectDetailPage.tsx';
 import { SitesPage } from './pages/admin/SitesPage.tsx';
@@ -122,6 +123,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <WorkSchedulePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/activity-definitions"
+            element={
+              <ProtectedRoute>
+                <WorkActivityDefinitionsPage />
               </ProtectedRoute>
             }
           />

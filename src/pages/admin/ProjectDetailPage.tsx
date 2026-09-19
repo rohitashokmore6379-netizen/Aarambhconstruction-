@@ -22,12 +22,14 @@ import {
   AlertTriangle,
   Printer,
   ChevronRight,
+  QrCode,
 } from 'lucide-react';
 import api from '../../services/api.ts';
 import { Project, Site, UnifiedPayment } from '../../types.ts';
 import { formatCurrency, formatDate, getStatusBadgeClass } from '../../utils/formatters.ts';
 import { ReceivePaymentModal } from '../../components/payments/ReceivePaymentModal.tsx';
 import { PaymentDrawer } from '../../components/payments/PaymentDrawer.tsx';
+import { SiteQRCodeModal } from '../../components/common/SiteQRCodeModal.tsx';
 import { ProjectWorkScheduleTab } from '../../components/workSchedule/ProjectWorkScheduleTab.tsx';
 import { CalendarCheck } from 'lucide-react';
 
@@ -47,6 +49,9 @@ export function ProjectDetailPage() {
   const [receiveModalOpen, setReceiveModalOpen] = useState<boolean>(false);
   const [selectedPayment, setSelectedPayment] = useState<UnifiedPayment | null>(null);
   const [drawerOpen, setDrawerOpen] = useState<boolean>(false);
+
+  // Site QR Code Modal
+  const [qrSite, setQrSite] = useState<Site | null>(null);
 
   // New Site Modal
   const [newSiteModalOpen, setNewSiteModalOpen] = useState<boolean>(false);
@@ -490,6 +495,25 @@ export function ProjectDetailPage() {
                     <span className="font-mono font-bold text-white">{formatCurrency(site.totalCost)}</span>
                   </div>
                 </div>
+
+                <div className="pt-2 flex justify-between items-center text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setQrSite(site)}
+                    className="px-2.5 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-xl font-semibold flex items-center gap-1.5 transition-colors"
+                    title="Generate Site QR Code & Printable Placard"
+                  >
+                    <QrCode className="w-3.5 h-3.5" />
+                    <span>Site QR Code</span>
+                  </button>
+
+                  <Link
+                    to={`/admin/work-logs?siteId=${site._id}&projectId=${id}&autoOpen=1`}
+                    className="text-slate-400 hover:text-amber-400 font-medium transition-colors"
+                  >
+                    Log Muster →
+                  </Link>
+                </div>
               </div>
             ))}
           </div>
@@ -737,6 +761,13 @@ export function ProjectDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Site QR Code Modal */}
+      <SiteQRCodeModal
+        site={qrSite}
+        isOpen={Boolean(qrSite)}
+        onClose={() => setQrSite(null)}
+      />
     </div>
   );
 }

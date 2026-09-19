@@ -317,12 +317,14 @@ export async function reverseMaterialPurchase(req: AuthRequest, res: Response) {
       action: 'MATERIAL_PURCHASE_REVERSED',
       entityType: 'MaterialPurchase',
       entityId: purchase._id.toString(),
-      projectId: purchase.projectId.toString(),
+      projectId: purchase.projectId ? purchase.projectId.toString() : undefined,
       description: `Reversed material invoice #${purchase.invoiceNumber} (₹${purchase.totalAmount}). Reason: ${reason}`,
       ipAddress: req.ip,
     });
 
-    const updatedFinancials = await calculateProjectFinancials(purchase.projectId.toString());
+    const updatedFinancials = purchase.projectId
+      ? await calculateProjectFinancials(purchase.projectId.toString())
+      : null;
 
     return res.json({
       success: true,
