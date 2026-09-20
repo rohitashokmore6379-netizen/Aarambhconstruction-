@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
+import mongoose from 'mongoose';
 import { createServer as createViteServer } from 'vite';
 import { connectDB } from './src/server/config/db.ts';
 import { seedDatabase } from './src/server/seed/seedData.ts';
@@ -32,13 +33,31 @@ async function startServer() {
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-  // Health check endpoint (always responds instantly)
-  app.get('/api/health', (req, res) => {
+  // Health & Database Sync check endpoints
+  app.get(['/api/health', '/api/sync/status'], (req, res) => {
+    const readyState = mongoose.connection.readyState;
+    const states: Record<number, string> = {
+      0: 'DISCONNECTED',
+      1: 'CONNECTED',
+      2: 'CONNECTING',
+      3: 'DISCONNECTING',
+    };
+    const dbConnected = readyState === 1 && isDbReady;
+
     res.json({
       status: 'ok',
+      connected: dbConnected,
       dbReady: isDbReady,
       service: 'Arambh Construction ERP API',
+      database: {
+        status: states[readyState] || 'UNKNOWN',
+        readyState,
+        name: mongoose.connection.name || 'arambh_construction',
+        host: mongoose.connection.host || 'localhost',
+        isMemory: !process.env.MONGODB_URI,
+      },
       timestamp: new Date().toISOString(),
+      time: Date.now(),
     });
   });
 

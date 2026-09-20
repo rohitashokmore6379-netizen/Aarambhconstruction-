@@ -354,6 +354,34 @@ export interface CompanySettingsData {
   invoicePrefix: string;
 }
 
+export interface MonthlyTrendItem {
+  month: string;
+  monthKey: string;
+  shortMonth: string;
+  year: number;
+  income: number;
+  expenses: number;
+  receipts: number; // backward compatibility
+  netCashFlow: number;
+  marginPercentage: number;
+  workerExpenses: number;
+  materialExpenses: number;
+  vendorExpenses: number;
+  otherExpenses: number;
+  workerDays: number;
+  totalLaborHours: number;
+  activeWorkers: number;
+  totalCapacityDays: number;
+  workerUtilizationRate: number; // 0 - 100%
+}
+
+export interface ProjectTrendSummary {
+  projectId: string;
+  projectName: string;
+  projectCode: string;
+  monthlyTrends: MonthlyTrendItem[];
+}
+
 export interface DashboardData {
   cards: {
     totalProjects: number;
@@ -391,7 +419,8 @@ export interface DashboardData {
     cashVsOnlineReceipts: Array<{ name: string; value: number; color: string }>;
     cashVsOnlineExpenses: Array<{ name: string; value: number; color: string }>;
     onlineMethodsBreakdown: Array<{ method: string; amount: number }>;
-    monthlyTrends: Array<{ month: string; receipts: number; expenses: number }>;
+    monthlyTrends: MonthlyTrendItem[];
+    projectMonthlyTrends?: ProjectTrendSummary[];
   };
   recentProjects: any[];
   recentTransactions: any[];
@@ -525,6 +554,26 @@ export interface WorkActivityDefinition {
   status: 'ACTIVE' | 'ARCHIVED';
   createdAt?: string;
   updatedAt?: string;
+}
+
+export type SyncConnectionState = 'CONNECTED' | 'SYNCING' | 'OFFLINE' | 'DB_DISCONNECTED';
+
+export interface DatabaseSyncInfo {
+  status: 'CONNECTED' | 'CONNECTING' | 'DISCONNECTED' | 'UNKNOWN';
+  readyState: number;
+  name: string;
+  host: string;
+  isMemory: boolean;
+}
+
+export interface SyncStatusData {
+  state: SyncConnectionState;
+  isOnline: boolean;
+  isDbConnected: boolean;
+  latencyMs: number | null;
+  lastSyncedAt: Date | null;
+  database?: DatabaseSyncInfo | null;
+  error?: string | null;
 }
 
 

@@ -35,6 +35,7 @@ import api from '../../services/api.ts';
 import { GlobalSearchModal } from '../search/GlobalSearchModal.tsx';
 import { ReceivePaymentModal } from '../payments/ReceivePaymentModal.tsx';
 import { AdminCredentialsModal } from '../admin/AdminCredentialsModal.tsx';
+import { SyncStatusIndicator, OfflineModeBanner, ReconnectedToast } from './SyncStatusIndicator.tsx';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -293,7 +294,10 @@ export function AdminLayout({ children }: AdminLayoutProps) {
             </button>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            {/* Real-time Database & Offline Sync Indicator */}
+            <SyncStatusIndicator />
+
             {/* Quick Admin Security & Password button */}
             <button
               onClick={() => setCredentialsModalOpen(true)}
@@ -337,6 +341,9 @@ export function AdminLayout({ children }: AdminLayoutProps) {
           </div>
         </header>
 
+        {/* Real-time Offline & Disconnection Warning Banner */}
+        <OfflineModeBanner />
+
         {/* Page Content Body */}
         <main className="flex-1 p-4 md:p-8 min-w-0">
           {children}
@@ -361,6 +368,9 @@ export function AdminLayout({ children }: AdminLayoutProps) {
           window.dispatchEvent(new CustomEvent('arambh-payment-recorded'));
         }}
       />
+
+      {/* Reconnected Notification Toast */}
+      <ReconnectedToast />
     </div>
   );
 }

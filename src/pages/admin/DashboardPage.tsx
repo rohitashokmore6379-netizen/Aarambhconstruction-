@@ -39,6 +39,7 @@ import { DashboardData, UnifiedPayment } from '../../types.ts';
 import { formatCurrency, formatDate, getStatusBadgeClass } from '../../utils/formatters.ts';
 import { PaymentDrawer } from '../../components/payments/PaymentDrawer.tsx';
 import { ReceivePaymentModal } from '../../components/payments/ReceivePaymentModal.tsx';
+import { InteractiveTrendGraphs } from '../../components/dashboard/InteractiveTrendGraphs.tsx';
 
 export function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
@@ -274,7 +275,14 @@ export function DashboardPage() {
         </div>
       ) : null}
 
-      {/* Charts Grid */}
+      {/* Primary Interactive Monthly Trend Graphs (Recharts) */}
+      <InteractiveTrendGraphs
+        monthlyTrends={charts?.monthlyTrends || []}
+        projectMonthlyTrends={charts?.projectMonthlyTrends || []}
+        projects={charts?.projectPaymentProgress || []}
+      />
+
+      {/* Secondary Project & Expense Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Project Payment Progress */}
         <div className="p-6 bg-slate-900 border border-slate-800 rounded-3xl space-y-4 shadow-xl">

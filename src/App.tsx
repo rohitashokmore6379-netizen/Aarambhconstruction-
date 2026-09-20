@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext.tsx';
+import { SyncProvider } from './context/SyncContext.tsx';
 
 // Layouts
 import { PublicLayout } from './components/layout/PublicLayout.tsx';
@@ -61,8 +62,9 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <Routes>
+      <SyncProvider>
+        <BrowserRouter>
+          <Routes>
           {/* Public Portal Routes */}
           <Route
             path="/"
@@ -283,6 +285,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
-    </AuthProvider>
+    </SyncProvider>
+  </AuthProvider>
   );
 }
