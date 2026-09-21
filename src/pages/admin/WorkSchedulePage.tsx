@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Calendar,
   Layers,
@@ -18,6 +19,7 @@ import {
   Building2,
   Play,
   RotateCcw,
+  ClipboardList,
 } from 'lucide-react';
 import api from '../../services/api.ts';
 import { Project, Site, Worker, WorkScheduleItem } from '../../types.ts';
@@ -127,6 +129,14 @@ export function WorkSchedulePage() {
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap">
+          <Link
+            to="/admin/reports"
+            className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold flex items-center gap-2 shadow-sm transition-all"
+          >
+            <ClipboardList className="w-4 h-4 text-amber-400" />
+            <span>Daily Site Report (DSR)</span>
+          </Link>
+
           <button
             onClick={() => setIsInitModalOpen(true)}
             className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 font-bold flex items-center gap-2 shadow-sm transition-all"

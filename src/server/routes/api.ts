@@ -138,6 +138,7 @@ admin.post('/documents', settingsCtrl.createDocument);
 // ==========================================
 // WORK SCHEDULE MODULE ROUTES
 // ==========================================
+admin.get('/work-schedules/daily-report', workScheduleCtrl.getDailySiteReport);
 admin.get('/work-schedules/activities-template', workScheduleCtrl.getPredefinedActivities);
 admin.get('/work-schedules/metrics', workScheduleCtrl.getScheduleMetrics);
 admin.post('/work-schedules/initialize', workScheduleCtrl.initializeProjectSchedule);

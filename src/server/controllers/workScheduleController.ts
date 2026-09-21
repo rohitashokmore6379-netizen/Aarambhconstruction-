@@ -9,6 +9,8 @@ import {
   Site,
   Worker,
   WorkActivityDefinition,
+  CompanySettings,
+  WorkLog,
 } from '../models/index.ts';
 import { DEFAULT_CONSTRUCTION_ACTIVITIES } from '../../data/constructionActivities.ts';
 import { createAuditLog } from '../services/auditService.ts';
@@ -676,3 +678,269 @@ async function syncProjectOverallProgress(projectId: any) {
     // silent catch
   }
 }
+
+// 14. Get Daily Site Report (DSR) aggregated for a specific project and date
+export async function getDailySiteReport(req: Request, res: Response) {
+  try {
+    const { projectId, date } = req.query;
+
+    if (!projectId) {
+      return res.status(400).json({ success: false, message: 'projectId is required' });
+    }
+
+    // Determine target day boundary in UTC / local standard
+    const targetDate = date ? new Date(date as string) : new Date();
+    if (isNaN(targetDate.getTime())) {
+      return res.status(400).json({ success: false, message: 'Invalid date parameter' });
+    }
+
+    const startOfDay = new Date(targetDate);
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const endOfDay = new Date(targetDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const [project, companySettings, workSchedules] = await Promise.all([
+      Project.findById(projectId).populate('siteId').lean(),
+      CompanySettings.findOne().lean(),
+      WorkSchedule.find({ projectId }).sort({ workOrder: 1 }).lean(),
+    ]);
+
+    if (!project) {
+      return res.status(404).json({ success: false, message: 'Project not found' });
+    }
+
+    const scheduleMap = new Map<string, any>();
+    workSchedules.forEach((s) => scheduleMap.set(s._id.toString(), s));
+
+    // Date range query for records
+    const dateQuery = {
+      projectId,
+      $or: [
+        { date: { $gte: startOfDay, $lte: endOfDay } },
+        { createdAt: { $gte: startOfDay, $lte: endOfDay } },
+      ],
+    };
+
+    const imageDateQuery = {
+      projectId,
+      $or: [
+        { uploadedAt: { $gte: startOfDay, $lte: endOfDay } },
+        { createdAt: { $gte: startOfDay, $lte: endOfDay } },
+      ],
+    };
+
+    // Parallel fetch of all daily operational entities
+    const [laborRecords, quantityRecords, images, progressUpdates, directWorkLogs] = await Promise.all([
+      WorkLaborRecord.find(dateQuery).sort({ createdAt: 1 }).lean(),
+      WorkQuantityRecord.find(dateQuery).sort({ createdAt: 1 }).lean(),
+      WorkImage.find(imageDateQuery).sort({ uploadedAt: -1 }).lean(),
+      WorkProgressUpdate.find({
+        projectId,
+        createdAt: { $gte: startOfDay, $lte: endOfDay },
+      })
+        .sort({ createdAt: 1 })
+        .lean(),
+      WorkLog.find({
+        projectId,
+        workDate: { $gte: startOfDay, $lte: endOfDay },
+      })
+        .populate('workerId')
+        .populate('workTypeId')
+        .lean(),
+    ]);
+
+    // Attach enriched stage info
+    const enrichedLabor = laborRecords.map((rec) => {
+      const schedule = scheduleMap.get(rec.workScheduleId?.toString());
+      return {
+        ...rec,
+        workName: schedule?.workName || 'General Site Work',
+        workOrder: schedule?.workOrder || 0,
+      };
+    });
+
+    const enrichedQuantities = quantityRecords.map((rec) => {
+      const schedule = scheduleMap.get(rec.workScheduleId?.toString());
+      return {
+        ...rec,
+        workName: schedule?.workName || 'Civil Construction Activity',
+        workOrder: schedule?.workOrder || 0,
+        targetQuantity: schedule?.targetQuantity || 0,
+        totalCompletedQuantity: schedule?.completedQuantity || 0,
+      };
+    });
+
+    const enrichedImages = images.map((img) => {
+      const schedule = scheduleMap.get(img.workScheduleId?.toString());
+      return {
+        ...img,
+        workName: schedule?.workName || 'Site Inspection',
+        workOrder: schedule?.workOrder || 0,
+      };
+    });
+
+    const enrichedProgressUpdates = progressUpdates.map((upd) => {
+      const schedule = scheduleMap.get(upd.workScheduleId?.toString());
+      return {
+        ...upd,
+        workName: schedule?.workName || 'Activity Progress',
+        workOrder: schedule?.workOrder || 0,
+      };
+    });
+
+    // Compute aggregated labor metrics
+    let totalWorkersCount = 0;
+    let totalSkilledWorkers = 0;
+    let totalUnskilledWorkers = 0;
+    let totalLaborHours = 0;
+    let totalEstimatedLaborCost = 0;
+
+    enrichedLabor.forEach((l) => {
+      totalWorkersCount += l.totalWorkers || 0;
+      totalSkilledWorkers += l.skilledWorkers || 0;
+      totalUnskilledWorkers += l.unskilledWorkers || 0;
+      totalLaborHours += l.totalLaborHours || 0;
+      totalEstimatedLaborCost += l.estimatedLaborCost || 0;
+    });
+
+    // If there were direct workforce logs (from workers module) add them
+    if (directWorkLogs.length > 0) {
+      directWorkLogs.forEach((wl: any) => {
+        totalWorkersCount += 1;
+        totalLaborHours += (wl.daysWorked || 1) * 8;
+        totalEstimatedLaborCost += wl.amount || 0;
+      });
+    }
+
+    // Identify activities in progress or worked on today
+    const activeScheduleIds = new Set([
+      ...enrichedLabor.map((l) => l.workScheduleId?.toString()),
+      ...enrichedQuantities.map((q) => q.workScheduleId?.toString()),
+      ...enrichedImages.map((i) => i.workScheduleId?.toString()),
+      ...enrichedProgressUpdates.map((u) => u.workScheduleId?.toString()),
+    ]);
+
+    const activeActivities = workSchedules.filter((s) =>
+      activeScheduleIds.has(s._id.toString()) || s.status === 'IN_PROGRESS'
+    );
+
+    // Weather, safety, and remarks aggregation
+    const remarksList: Array<{
+      source: string;
+      activityName: string;
+      remark: string;
+      author?: string;
+      time?: string;
+    }> = [];
+
+    enrichedLabor.forEach((l) => {
+      if (l.remarks && l.remarks.trim()) {
+        remarksList.push({
+          source: 'Labor & Manpower',
+          activityName: l.workName,
+          remark: l.remarks,
+          author: l.supervisor || l.createdBy || 'Site Supervisor',
+        });
+      }
+    });
+
+    enrichedQuantities.forEach((q) => {
+      if (q.remarks && q.remarks.trim()) {
+        remarksList.push({
+          source: 'Output Quantity Execution',
+          activityName: q.workName,
+          remark: q.remarks,
+          author: q.createdBy || 'Site Engineer',
+        });
+      }
+    });
+
+    enrichedProgressUpdates.forEach((u) => {
+      if (u.remarks && u.remarks.trim()) {
+        remarksList.push({
+          source: 'Stage Progress Milestone',
+          activityName: u.workName,
+          remark: u.remarks,
+          author: u.updatedBy || 'Supervising Engineer',
+        });
+      }
+    });
+
+    enrichedImages.forEach((img) => {
+      if (img.caption && img.caption.trim()) {
+        remarksList.push({
+          source: `Site Photo (${img.imageType})`,
+          activityName: img.workName,
+          remark: img.caption,
+          author: img.uploadedBy || 'Site Engineer',
+        });
+      }
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        reportDate: startOfDay.toISOString(),
+        formattedDate: targetDate.toLocaleDateString('en-IN', {
+          weekday: 'long',
+          day: '2-digit',
+          month: 'long',
+          year: 'numeric',
+        }),
+        project: {
+          _id: project._id,
+          name: project.projectName,
+          code: project.projectCode,
+          type: project.projectType,
+          status: project.status,
+          location: project.location,
+          clientName: project.clientName,
+          clientPhone: project.clientPhone,
+          startDate: project.startDate,
+          expectedEndDate: project.expectedEndDate,
+          progressPercentage: project.progressPercentage || 0,
+          site: project.siteId,
+        },
+        company: companySettings || {
+          companyName: 'ARAMBH CONSTRUCTION',
+          directorName: 'Er. Sudarshan Bajrang Naik',
+          tagline: 'इंजिनिअर ॲण्ड गव्हर्नमेंट कॉन्ट्रॅक्टर',
+          licenseNumber: 'PWD/KOP/2021/CLASS-A/0942',
+          phone: '+917796853434',
+          email: 'arambhconstruction9977@gmail.com',
+          address: 'At/Post Shengaon, Tal: Bhudargad, District: Kolhapur, PIN 416209',
+          gstNumber: '27AAQFA4918L1Z8',
+        },
+        metrics: {
+          totalWorkersCount,
+          totalSkilledWorkers,
+          totalUnskilledWorkers,
+          totalLaborHours,
+          totalEstimatedLaborCost,
+          quantitiesLoggedCount: enrichedQuantities.length,
+          imagesCount: enrichedImages.length,
+          activeActivitiesCount: activeActivities.length,
+          remarksCount: remarksList.length,
+        },
+        labor: {
+          records: enrichedLabor,
+          directLogs: directWorkLogs,
+          totalWorkers: totalWorkersCount,
+          skilled: totalSkilledWorkers,
+          unskilled: totalUnskilledWorkers,
+          totalHours: totalLaborHours,
+          cost: totalEstimatedLaborCost,
+        },
+        quantities: enrichedQuantities,
+        images: enrichedImages,
+        progressUpdates: enrichedProgressUpdates,
+        activeActivities,
+        remarks: remarksList,
+      },
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+}
+

@@ -576,4 +576,78 @@ export interface SyncStatusData {
   error?: string | null;
 }
 
+export interface DailySiteReportData {
+  reportDate: string;
+  formattedDate: string;
+  project: {
+    _id: string;
+    name: string;
+    code: string;
+    type: string;
+    status: string;
+    location: string;
+    clientName?: string;
+    clientPhone?: string;
+    startDate?: string;
+    expectedEndDate?: string;
+    progressPercentage: number;
+    site?: any;
+  };
+  company: {
+    companyName: string;
+    directorName?: string;
+    tagline?: string;
+    licenseNumber?: string;
+    phone: string;
+    email: string;
+    address: string;
+    gstNumber: string;
+    logoUrl?: string;
+  };
+  metrics: {
+    totalWorkersCount: number;
+    totalSkilledWorkers: number;
+    totalUnskilledWorkers: number;
+    totalLaborHours: number;
+    totalEstimatedLaborCost: number;
+    quantitiesLoggedCount: number;
+    imagesCount: number;
+    activeActivitiesCount: number;
+    remarksCount: number;
+  };
+  labor: {
+    records: Array<WorkLaborItem & { workName: string; workOrder: number }>;
+    directLogs: any[];
+    totalWorkers: number;
+    skilled: number;
+    unskilled: number;
+    totalHours: number;
+    cost: number;
+  };
+  quantities: Array<
+    WorkQuantityItem & {
+      workName: string;
+      workOrder: number;
+      targetQuantity: number;
+      totalCompletedQuantity: number;
+    }
+  >;
+  images: Array<WorkImageItem & { workName: string; workOrder: number }>;
+  progressUpdates: Array<
+    WorkProgressHistoryItem & {
+      workName: string;
+      workOrder: number;
+    }
+  >;
+  activeActivities: WorkScheduleItem[];
+  remarks: Array<{
+    source: string;
+    activityName: string;
+    remark: string;
+    author?: string;
+    time?: string;
+  }>;
+}
+
+
 
