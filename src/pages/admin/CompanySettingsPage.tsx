@@ -19,9 +19,16 @@ import {
   EyeOff,
   Sparkles,
   Fingerprint,
+  Trash2,
+  Smartphone,
 } from 'lucide-react';
 import api from '../../services/api.ts';
 import { useAuth } from '../../context/AuthContext.tsx';
+import {
+  isWebAuthnSupported,
+  base64urlToUint8Array,
+  bufferToBase64url,
+} from '../../utils/webauthn.ts';
 
 export function CompanySettingsPage() {
   const { user, updateCurrentUser } = useAuth();
@@ -65,6 +72,15 @@ export function CompanySettingsPage() {
   const [passwordSaving, setPasswordSaving] = useState<boolean>(false);
   const [passwordSaved, setPasswordSaved] = useState<boolean>(false);
   const [passwordError, setPasswordError] = useState<string>('');
+
+  // 4. WebAuthn Biometrics State
+  const [biometricsSupported, setBiometricsSupported] = useState<boolean>(false);
+  const [credentials, setCredentials] = useState<any[]>([]);
+  const [bioLoading, setBioLoading] = useState<boolean>(false);
+  const [bioRegistering, setBioRegistering] = useState<boolean>(false);
+  const [bioSuccess, setBioSuccess] = useState<string>('');
+  const [bioError, setBioError] = useState<string>('');
+  const [deviceName, setDeviceName] = useState<string>('');
 
   useEffect(() => {
     async function loadSettings() {
@@ -200,6 +216,129 @@ export function CompanySettingsPage() {
       setPasswordError(err.response?.data?.message || err.message || 'Failed to change password.');
     } finally {
       setPasswordSaving(false);
+    }
+  };
+
+  // Check WebAuthn support and load credentials on mount
+  useEffect(() => {
+    setBiometricsSupported(isWebAuthnSupported());
+    loadBiometricCredentials();
+  }, []);
+
+  const loadBiometricCredentials = async () => {
+    setBioLoading(true);
+    try {
+      const res = await api.get('/admin/webauthn/credentials');
+      if (res.data.success) {
+        setCredentials(res.data.credentials || []);
+      }
+    } catch (err) {
+      // ignore
+    } finally {
+      setBioLoading(false);
+    }
+  };
+
+  const handleRegisterBiometrics = async () => {
+    setBioError('');
+    setBioSuccess('');
+    setBioRegistering(true);
+
+    if (!isWebAuthnSupported()) {
+      setBioError('WebAuthn biometrics is not supported in this browser or context.');
+      setBioRegistering(false);
+      return;
+    }
+
+    try {
+      // 1. Get registration challenge options from backend
+      const optionsRes = await api.get('/admin/webauthn/register-options');
+      if (!optionsRes.data.success) {
+        throw new Error(optionsRes.data.message || 'Failed to initialize biometric challenge');
+      }
+
+      const opts = optionsRes.data.options;
+
+      // Prepare PublicKeyCredentialCreationOptions
+      const publicKeyCredentialCreationOptions: PublicKeyCredentialCreationOptions = {
+        challenge: base64urlToUint8Array(opts.challenge),
+        rp: {
+          name: opts.rp.name,
+          id: window.location.hostname,
+        },
+        user: {
+          id: base64urlToUint8Array(opts.user.id),
+          name: opts.user.name,
+          displayName: opts.user.displayName,
+        },
+        pubKeyCredParams: opts.pubKeyCredParams,
+        authenticatorSelection: {
+          authenticatorAttachment: 'platform',
+          userVerification: 'required',
+          residentKey: 'preferred',
+        },
+        timeout: opts.timeout || 60000,
+        attestation: 'none',
+      };
+
+      // 2. Invoke browser navigator.credentials.create
+      const credential = (await navigator.credentials.create({
+        publicKey: publicKeyCredentialCreationOptions,
+      })) as PublicKeyCredential;
+
+      if (!credential) {
+        throw new Error('Biometric sensor operation was cancelled or timed out.');
+      }
+
+      const rawIdBase64 = bufferToBase64url(credential.rawId);
+      const defaultName =
+        deviceName.trim() ||
+        (navigator.userAgent.includes('Mac')
+          ? 'Touch ID / Apple Silicon'
+          : navigator.userAgent.includes('Windows')
+          ? 'Windows Hello'
+          : navigator.userAgent.includes('Android')
+          ? 'Android Biometrics'
+          : 'Admin Device Biometrics');
+
+      // 3. Send back to backend for verification and storage
+      const verifyRes = await api.post('/admin/webauthn/verify-register', {
+        credentialId: credential.id,
+        rawId: rawIdBase64,
+        deviceName: defaultName,
+        deviceType: 'platform',
+      });
+
+      if (verifyRes.data.success) {
+        setBioSuccess('Biometric passkey successfully registered! You can now log in using fingerprint or face recognition.');
+        setDeviceName('');
+        await loadBiometricCredentials();
+      } else {
+        setBioError(verifyRes.data.message || 'Failed to register biometrics');
+      }
+    } catch (err: any) {
+      if (err.name === 'NotAllowedError') {
+        setBioError('Biometric prompt was canceled or timed out.');
+      } else {
+        setBioError(err.response?.data?.message || err.message || 'Biometric registration failed.');
+      }
+    } finally {
+      setBioRegistering(false);
+    }
+  };
+
+  const handleRemoveCredential = async (credentialId: string) => {
+    if (!window.confirm('Are you sure you want to remove this biometric passkey?')) return;
+    try {
+      const res = await api.delete('/admin/webauthn/credentials', {
+        data: { credentialId },
+      });
+      if (res.data.success) {
+        setBioSuccess('Biometric passkey removed.');
+        await loadBiometricCredentials();
+      }
+    } catch (err: any) {
+      setBioError(err.response?.data?.message || 'Failed to remove biometric key');
     }
   };
 
@@ -753,6 +892,135 @@ export function CompanySettingsPage() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+
+          {/* 3. WEBAUTHN DEVICE BIOMETRICS (Touch ID / Face Recognition) */}
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-6">
+            <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                  <Fingerprint className="w-5 h-5 text-amber-400" />
+                  <span>Device Biometrics & Passkeys (WebAuthn)</span>
+                </h3>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Log in instantly with your device's fingerprint scanner, Apple Touch ID / Face ID, or Windows Hello.
+                </p>
+              </div>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center gap-1">
+                FIDO2 / WebAuthn
+              </span>
+            </div>
+
+            {bioSuccess && (
+              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{bioSuccess}</span>
+              </div>
+            )}
+
+            {bioError && (
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{bioError}</span>
+              </div>
+            )}
+
+            {/* Registration Action */}
+            <div className="p-4 rounded-2xl bg-slate-950/70 border border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <h4 className="text-xs font-bold text-white flex items-center gap-2">
+                  <Smartphone className="w-4 h-4 text-amber-400" />
+                  <span>Register This Device's Biometrics</span>
+                </h4>
+                <p className="text-[11px] text-slate-400">
+                  {biometricsSupported
+                    ? 'Your browser supports hardware biometric verification.'
+                    : 'WebAuthn is not supported in this browser environment.'}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 w-full md:w-auto">
+                <input
+                  type="text"
+                  placeholder="Device nickname (optional)"
+                  value={deviceName}
+                  onChange={(e) => setDeviceName(e.target.value)}
+                  className="px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white placeholder:text-slate-500 w-full md:w-56 focus:outline-none focus:border-amber-500"
+                />
+                <button
+                  type="button"
+                  onClick={handleRegisterBiometrics}
+                  disabled={bioRegistering || !biometricsSupported}
+                  className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-2 transition-all disabled:opacity-50 shrink-0 shadow-lg shadow-amber-500/10"
+                >
+                  {bioRegistering ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Scanning Biometrics...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Fingerprint className="w-4 h-4" />
+                      <span>Register Biometrics</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* List of Registered Passkeys */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                Registered Biometric Devices ({credentials.length})
+              </h4>
+
+              {bioLoading ? (
+                <div className="p-4 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                  <span>Loading biometric credentials...</span>
+                </div>
+              ) : credentials.length === 0 ? (
+                <div className="p-6 rounded-2xl bg-slate-950/40 border border-dashed border-slate-800 text-center space-y-2">
+                  <Fingerprint className="w-8 h-8 text-slate-600 mx-auto" />
+                  <p className="text-xs font-semibold text-slate-400">No biometric passkeys configured yet</p>
+                  <p className="text-[11px] text-slate-500">
+                    Register your fingerprint or face recognition above to sign into the ERP without typing passwords.
+                  </p>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-800/60 rounded-2xl border border-slate-800 overflow-hidden bg-slate-950/40">
+                  {credentials.map((cred) => (
+                    <div
+                      key={cred.credentialId}
+                      className="p-4 flex items-center justify-between gap-3 hover:bg-slate-800/30 transition-colors"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 shrink-0">
+                          <Fingerprint className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold text-white truncate">
+                            {cred.deviceName || 'Admin Biometric Passkey'}
+                          </div>
+                          <div className="text-[10px] text-slate-500 font-mono">
+                            Added: {new Date(cred.createdAt).toLocaleDateString()} • Logins: {cred.counter || 0}
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveCredential(cred.credentialId)}
+                        className="p-2 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition-colors shrink-0"
+                        title="Delete biometric passkey"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

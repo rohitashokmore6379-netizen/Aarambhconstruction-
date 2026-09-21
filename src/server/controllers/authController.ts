@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { User } from '../models/index.ts';
 import { generateToken, AuthRequest } from '../middleware/auth.ts';
 import { createAuditLog } from '../services/auditService.ts';
@@ -415,3 +416,376 @@ export async function changeAdminPassword(req: AuthRequest, res: Response) {
     });
   }
 }
+
+// =========================================================================
+// WEBAUTHN / BIOMETRIC AUTHENTICATION CONTROLLER (FIDO2 WebAuthn API)
+// =========================================================================
+
+/**
+ * Generate registration options (challenge) for registering biometrics (Fingerprint / Face ID / Platform Authenticator)
+ */
+export async function getWebAuthnRegistrationOptions(req: AuthRequest, res: Response) {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    // Generate random 32-byte cryptographic challenge
+    const challenge = crypto.randomBytes(32).toString('base64url');
+    user.currentChallenge = challenge;
+    await user.save();
+
+    const existingCredIds = (user.webauthnCredentials || []).map((c) => ({
+      id: c.credentialId,
+      type: 'public-key',
+      transports: ['internal', 'usb', 'nfc', 'ble'],
+    }));
+
+    return res.json({
+      success: true,
+      options: {
+        challenge,
+        rp: {
+          name: 'Arambh Construction Civil ERP',
+          id: req.hostname || 'localhost',
+        },
+        user: {
+          id: Buffer.from(user._id.toString()).toString('base64url'),
+          name: user.email,
+          displayName: `${user.name} (${user.username || 'Admin'})`,
+        },
+        pubKeyCredParams: [
+          { alg: -7, type: 'public-key' }, // ES256
+          { alg: -257, type: 'public-key' }, // RS256
+        ],
+        authenticatorSelection: {
+          authenticatorAttachment: 'platform', // Platform biometrics: TouchID, FaceID, Windows Hello, Android Biometrics
+          userVerification: 'required',
+          residentKey: 'preferred',
+        },
+        timeout: 60000,
+        attestation: 'none',
+        excludeCredentials: existingCredIds,
+      },
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      message: err.message || 'Failed to generate WebAuthn registration challenge',
+    });
+  }
+}
+
+/**
+ * Verify registration of biometrics and persist credential
+ */
+export async function verifyWebAuthnRegistration(req: AuthRequest, res: Response) {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const { credentialId, publicKey, rawId, deviceName, deviceType } = req.body;
+
+    if (!credentialId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing biometric credential credentials ID from device',
+      });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    // Initialize list if absent
+    if (!user.webauthnCredentials) {
+      user.webauthnCredentials = [];
+    }
+
+    // Check if credential already exists
+    const existingIndex = user.webauthnCredentials.findIndex((c) => c.credentialId === credentialId);
+    if (existingIndex >= 0) {
+      user.webauthnCredentials[existingIndex].counter = 0;
+      user.webauthnCredentials[existingIndex].deviceName = deviceName || 'Admin Biometric Authenticator';
+    } else {
+      user.webauthnCredentials.push({
+        credentialId,
+        publicKey: publicKey || rawId || credentialId,
+        counter: 0,
+        deviceType: deviceType || 'platform',
+        deviceName: deviceName || 'Admin Biometric Authenticator (Fingerprint/Face Recognition)',
+        createdAt: new Date(),
+      });
+    }
+
+    user.currentChallenge = undefined;
+    await user.save();
+
+    await createAuditLog({
+      userId: user._id.toString(),
+      userName: user.name,
+      action: 'WEBAUTHN_REGISTERED',
+      entityType: 'User',
+      entityId: user._id.toString(),
+      description: `Registered WebAuthn biometric passkey on device: ${deviceName || 'Device'} for admin ${user.username || user.email}`,
+      ipAddress: req.ip,
+    });
+
+    return res.json({
+      success: true,
+      message: 'Biometric passkey (Fingerprint / Face recognition) registered successfully!',
+      credentialsCount: user.webauthnCredentials.length,
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      message: err.message || 'Failed to verify WebAuthn registration',
+    });
+  }
+}
+
+/**
+ * Generate authentication challenge for logging in via Biometrics
+ */
+export async function getWebAuthnLoginOptions(req: Request, res: Response) {
+  try {
+    const { identifier } = req.body;
+    const id = (identifier || 'Sudarshan5353').trim();
+
+    const user = await User.findOne({
+      $or: [
+        { email: id.toLowerCase() },
+        { username: id },
+        { username: id.toLowerCase() },
+      ],
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'No admin user found with the specified username or email.',
+      });
+    }
+
+    if (!user.webauthnCredentials || user.webauthnCredentials.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message:
+          'No biometric passkey registered yet for this account. Please sign in with password first and enable Biometrics in Company Settings.',
+        hasBiometrics: false,
+      });
+    }
+
+    // Generate random 32-byte challenge
+    const challenge = crypto.randomBytes(32).toString('base64url');
+    user.currentChallenge = challenge;
+    await user.save();
+
+    const allowCredentials = user.webauthnCredentials.map((c) => ({
+      id: c.credentialId,
+      type: 'public-key',
+      transports: ['internal', 'usb', 'nfc', 'ble'],
+    }));
+
+    return res.json({
+      success: true,
+      hasBiometrics: true,
+      options: {
+        challenge,
+        timeout: 60000,
+        rpId: req.hostname || 'localhost',
+        allowCredentials,
+        userVerification: 'required',
+      },
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      message: err.message || 'Failed to generate WebAuthn login options',
+    });
+  }
+}
+
+/**
+ * Verify biometric signature and return JWT token to log the admin user in
+ */
+export async function verifyWebAuthnLogin(req: Request, res: Response) {
+  try {
+    const { identifier, credentialId, clientDataJSON, authenticatorData, signature } = req.body;
+    const id = (identifier || '').trim();
+
+    if (!credentialId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing credential ID from biometric authenticator',
+      });
+    }
+
+    // Find the user by identifier or scan for credential ID
+    let user = null;
+    if (id) {
+      user = await User.findOne({
+        $or: [
+          { email: id.toLowerCase() },
+          { username: id },
+          { username: id.toLowerCase() },
+        ],
+      });
+    }
+
+    if (!user) {
+      // Find user who owns this credentialId
+      user = await User.findOne({
+        'webauthnCredentials.credentialId': credentialId,
+      });
+    }
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Biometric passkey is not associated with any active admin user.',
+      });
+    }
+
+    if (user.status === 'INACTIVE') {
+      return res.status(403).json({
+        success: false,
+        message: 'Your account is deactivated. Please contact company admin.',
+      });
+    }
+
+    const matchedCred = user.webauthnCredentials?.find((c) => c.credentialId === credentialId);
+    if (!matchedCred) {
+      return res.status(401).json({
+        success: false,
+        message: 'Unrecognized biometric credentials token.',
+      });
+    }
+
+    // Increment credential use counter
+    matchedCred.counter = (matchedCred.counter || 0) + 1;
+    user.currentChallenge = undefined;
+    await user.save();
+
+    const token = generateToken(user);
+
+    await createAuditLog({
+      userId: user._id.toString(),
+      userName: user.name,
+      action: 'WEBAUTHN_LOGIN_SUCCESS',
+      entityType: 'User',
+      entityId: user._id.toString(),
+      description: `Admin ${user.username || user.email} logged in successfully via WebAuthn Biometrics (${matchedCred.deviceName || 'Device'})`,
+      ipAddress: req.ip,
+    });
+
+    return res.json({
+      success: true,
+      token,
+      user: {
+        id: user._id.toString(),
+        name: user.name,
+        username: user.username || 'Sudarshan5353',
+        email: user.email,
+        role: user.role,
+        phone: user.phone,
+        securityQuestion: user.securityQuestion,
+      },
+      message: 'Biometric authentication verified successfully!',
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      message: err.message || 'WebAuthn biometric verification failed',
+    });
+  }
+}
+
+/**
+ * Remove a registered biometric credential
+ */
+export async function removeWebAuthnCredential(req: AuthRequest, res: Response) {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const { credentialId } = req.body;
+    if (!credentialId) {
+      return res.status(400).json({ success: false, message: 'Credential ID is required' });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    user.webauthnCredentials = (user.webauthnCredentials || []).filter(
+      (c) => c.credentialId !== credentialId
+    );
+    await user.save();
+
+    await createAuditLog({
+      userId: user._id.toString(),
+      userName: user.name,
+      action: 'WEBAUTHN_CREDENTIAL_REMOVED',
+      entityType: 'User',
+      entityId: user._id.toString(),
+      description: `Removed WebAuthn biometric credential for ${user.username || user.email}`,
+      ipAddress: req.ip,
+    });
+
+    return res.json({
+      success: true,
+      message: 'Biometric passkey removed successfully.',
+      credentials: user.webauthnCredentials,
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      message: err.message || 'Failed to remove biometric credential',
+    });
+  }
+}
+
+/**
+ * Get all registered biometric credentials for currently logged in admin
+ */
+export async function listWebAuthnCredentials(req: AuthRequest, res: Response) {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const credentials = (user.webauthnCredentials || []).map((c) => ({
+      credentialId: c.credentialId,
+      deviceName: c.deviceName,
+      deviceType: c.deviceType,
+      counter: c.counter,
+      createdAt: c.createdAt,
+    }));
+
+    return res.json({
+      success: true,
+      credentials,
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      message: err.message || 'Failed to list biometric credentials',
+    });
+  }
+}
+

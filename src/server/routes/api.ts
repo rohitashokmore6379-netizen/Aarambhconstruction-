@@ -29,6 +29,10 @@ router.get('/auth/me', authenticate, authCtrl.getMe);
 router.post('/auth/forgot-password/request', authCtrl.forgotPasswordRequest);
 router.post('/auth/forgot-password/reset', authCtrl.forgotPasswordReset);
 
+// WebAuthn Biometric Login (Public Challenges)
+router.post('/auth/webauthn/login-options', authCtrl.getWebAuthnLoginOptions);
+router.post('/auth/webauthn/verify-login', authCtrl.verifyWebAuthnLogin);
+
 router.get('/public/projects', publicCtrl.getPublicProjects);
 router.get('/public/projects/:id', publicCtrl.getPublicProjectById);
 router.post('/public/inquiry', publicCtrl.submitInquiry);
@@ -43,6 +47,12 @@ admin.use(authenticate, requireAdmin);
 admin.get('/profile', authCtrl.getMe);
 admin.put('/profile', authCtrl.updateAdminProfile);
 admin.put('/change-password', authCtrl.changeAdminPassword);
+
+// Admin WebAuthn Biometric Device Registration & Management
+admin.get('/webauthn/register-options', authCtrl.getWebAuthnRegistrationOptions);
+admin.post('/webauthn/verify-register', authCtrl.verifyWebAuthnRegistration);
+admin.get('/webauthn/credentials', authCtrl.listWebAuthnCredentials);
+admin.delete('/webauthn/credentials', authCtrl.removeWebAuthnCredential);
 
 // Dashboard & Analytics
 admin.get('/dashboard', dashboardCtrl.getDashboardMetrics);

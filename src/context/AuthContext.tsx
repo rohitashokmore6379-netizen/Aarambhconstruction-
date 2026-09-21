@@ -11,6 +11,7 @@ interface AuthContextType {
   login: (email: string, pass: string) => Promise<{ success: boolean; message?: string }>;
   logout: () => void;
   updateCurrentUser: (userData: Partial<User>) => void;
+  setAuthSession: (token: string, user: User) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -88,6 +89,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const setAuthSession = (newToken: string, newUser: User) => {
+    localStorage.setItem('arambh_auth_token', newToken);
+    localStorage.setItem('arambh_user', JSON.stringify(newUser));
+    setToken(newToken);
+    setUser(newUser);
+  };
+
   const isAuthenticated = !!token && !!user;
   const isAdmin = user?.role === 'ROLE_ADMIN';
 
@@ -102,6 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         logout,
         updateCurrentUser,
+        setAuthSession,
       }}
     >
       {children}

@@ -9,6 +9,8 @@ import {
   HardHat,
   Camera,
   Search,
+  BarChart2,
+  Table,
 } from 'lucide-react';
 import api from '../../services/api.ts';
 import { WorkScheduleItem, Site, Worker } from '../../types.ts';
@@ -16,6 +18,7 @@ import { InitializeScheduleModal } from './InitializeScheduleModal.tsx';
 import { CreateActivityModal } from './CreateActivityModal.tsx';
 import { UpdateProgressModal } from './UpdateProgressModal.tsx';
 import { WorkScheduleDetailDrawer } from './WorkScheduleDetailDrawer.tsx';
+import { GanttChart } from './GanttChart.tsx';
 
 interface Props {
   projectId: string;
@@ -28,6 +31,7 @@ export function ProjectWorkScheduleTab({ projectId, projectName, sites }: Props)
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [viewMode, setViewMode] = useState<'table' | 'gantt'>('gantt');
 
   // Modals
   const [isInitModalOpen, setIsInitModalOpen] = useState<boolean>(false);
@@ -102,6 +106,32 @@ export function ProjectWorkScheduleTab({ projectId, projectName, sites }: Props)
         </div>
 
         <div className="flex items-center gap-2">
+          {/* View Mode Toggle */}
+          <div className="flex items-center bg-slate-950 border border-slate-800 rounded-xl p-1">
+            <button
+              onClick={() => setViewMode('gantt')}
+              className={`px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all ${
+                viewMode === 'gantt'
+                  ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <BarChart2 className="w-3.5 h-3.5" />
+              <span>Gantt Chart</span>
+            </button>
+            <button
+              onClick={() => setViewMode('table')}
+              className={`px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all ${
+                viewMode === 'table'
+                  ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Table className="w-3.5 h-3.5" />
+              <span>Table</span>
+            </button>
+          </div>
+
           {schedules.length === 0 && (
             <button
               onClick={() => setIsInitModalOpen(true)}
@@ -139,6 +169,13 @@ export function ProjectWorkScheduleTab({ projectId, projectName, sites }: Props)
             <span>Initialize 26 Construction Sequence</span>
           </button>
         </div>
+      ) : viewMode === 'gantt' ? (
+        <GanttChart
+          schedules={filtered}
+          projectName={projectName}
+          onSelectActivity={(id) => setSelectedScheduleIdForDrawer(id)}
+          onUpdateActivity={(item) => setSelectedScheduleForUpdate(item)}
+        />
       ) : (
         <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
           <div className="overflow-x-auto">

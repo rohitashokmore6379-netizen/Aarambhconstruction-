@@ -31,7 +31,8 @@ import { ReceivePaymentModal } from '../../components/payments/ReceivePaymentMod
 import { PaymentDrawer } from '../../components/payments/PaymentDrawer.tsx';
 import { SiteQRCodeModal } from '../../components/common/SiteQRCodeModal.tsx';
 import { ProjectWorkScheduleTab } from '../../components/workSchedule/ProjectWorkScheduleTab.tsx';
-import { CalendarCheck } from 'lucide-react';
+import { GanttChart } from '../../components/workSchedule/GanttChart.tsx';
+import { CalendarCheck, BarChart2 } from 'lucide-react';
 
 export function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -180,6 +181,7 @@ export function ProjectDetailPage() {
 
   const tabs = [
     { key: 'payments', label: 'Financial Ledger & Receipts', icon: Receipt },
+    { key: 'gantt', label: 'Gantt Progress Chart', icon: BarChart2 },
     { key: 'schedule', label: 'Work Schedule (26 Stages)', icon: CalendarCheck },
     { key: 'sites', label: `Sites & Plots (${sites.length})`, icon: Layers },
     { key: 'worklogs', label: `Daily Labor (${workLogs.length})`, icon: HardHat },
@@ -440,6 +442,15 @@ export function ProjectDetailPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Tab: Gantt Chart Progress */}
+      {currentTab === 'gantt' && (
+        <ProjectWorkScheduleTab
+          projectId={project._id}
+          projectName={project.projectName}
+          sites={sites}
+        />
       )}
 
       {/* Tab: Work Schedule */}

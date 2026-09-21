@@ -14,9 +14,15 @@ import {
   Eye,
   EyeOff,
   Sparkles,
+  Fingerprint,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.tsx';
 import api from '../../services/api.ts';
+import {
+  isWebAuthnSupported,
+  base64urlToUint8Array,
+  bufferToBase64url,
+} from '../../utils/webauthn.ts';
 
 export function LoginPage() {
   const [email, setEmail] = useState<string>('Sudarshan5353');
@@ -45,8 +51,82 @@ export function LoginPage() {
   const [forgotLoading, setForgotLoading] = useState<boolean>(false);
   const [forgotError, setForgotError] = useState<string>('');
 
-  const { login } = useAuth();
+  const { login, setAuthSession } = useAuth();
   const navigate = useNavigate();
+
+  // Biometric state
+  const [bioLoading, setBioLoading] = useState<boolean>(false);
+  const [bioError, setBioError] = useState<string>('');
+
+  const handleBiometricLogin = async () => {
+    setError('');
+    setBioError('');
+    setBioLoading(true);
+
+    if (!isWebAuthnSupported()) {
+      setBioError('Biometrics is not supported in this browser.');
+      setBioLoading(false);
+      return;
+    }
+
+    try {
+      // 1. Fetch login challenge
+      const identifier = (email || 'Sudarshan5353').trim();
+      const optionsRes = await api.post('/auth/webauthn/login-options', {
+        identifier,
+      });
+
+      if (!optionsRes.data.success) {
+        throw new Error(optionsRes.data.message || 'Failed to initialize biometric challenge');
+      }
+
+      const opts = optionsRes.data.options;
+
+      const allowCredentials = (opts.allowCredentials || []).map((cred: any) => ({
+        id: base64urlToUint8Array(cred.id),
+        type: cred.type,
+        transports: cred.transports,
+      }));
+
+      // 2. Request assertion from device biometric sensor
+      const credential = (await navigator.credentials.get({
+        publicKey: {
+          challenge: base64urlToUint8Array(opts.challenge),
+          rpId: window.location.hostname,
+          allowCredentials: allowCredentials.length > 0 ? allowCredentials : undefined,
+          userVerification: 'required',
+          timeout: 60000,
+        },
+      })) as PublicKeyCredential;
+
+      if (!credential) {
+        throw new Error('Biometric verification cancelled.');
+      }
+
+      // 3. Verify on server
+      const verifyRes = await api.post('/auth/webauthn/verify-login', {
+        identifier,
+        credentialId: credential.id,
+      });
+
+      if (verifyRes.data.success) {
+        setAuthSession(verifyRes.data.token, verifyRes.data.user);
+        navigate('/admin/dashboard');
+      } else {
+        setBioError(verifyRes.data.message || 'Biometric authentication failed');
+      }
+    } catch (err: any) {
+      if (err.name === 'NotAllowedError') {
+        setBioError('Biometric verification was canceled or timed out.');
+      } else {
+        setBioError(
+          err.response?.data?.message || err.message || 'Biometric verification failed'
+        );
+      }
+    } finally {
+      setBioLoading(false);
+    }
+  };
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -209,6 +289,13 @@ export function LoginPage() {
               </div>
             )}
 
+            {bioError && (
+              <div className="p-3 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center gap-2">
+                <Fingerprint className="w-4 h-4 shrink-0" />
+                <span>{bioError}</span>
+              </div>
+            )}
+
             <form onSubmit={handleLoginSubmit} className="space-y-4 text-xs">
               <div>
                 <label className="block text-slate-300 font-semibold mb-1.5">
@@ -273,6 +360,34 @@ export function LoginPage() {
               >
                 <span>{loading ? 'Authenticating...' : 'Sign In To ERP Suite'}</span>
                 <ArrowRight className="w-4 h-4" />
+              </button>
+
+              <div className="relative flex py-1 items-center">
+                <div className="flex-grow border-t border-slate-800"></div>
+                <span className="flex-shrink mx-3 text-[10px] text-slate-500 uppercase tracking-widest font-mono">
+                  Or Biometric Access
+                </span>
+                <div className="flex-grow border-t border-slate-800"></div>
+              </div>
+
+              {/* Biometrics Login Button (Fingerprint / Face ID) */}
+              <button
+                type="button"
+                onClick={handleBiometricLogin}
+                disabled={bioLoading}
+                className="w-full py-2.5 px-4 bg-slate-950 hover:bg-slate-800/80 text-emerald-400 hover:text-emerald-300 border border-emerald-500/30 hover:border-emerald-500/50 font-bold rounded-xl shadow-lg shadow-emerald-500/5 text-xs transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {bioLoading ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin text-emerald-400" />
+                    <span>Scanning Fingerprint / Face ID...</span>
+                  </>
+                ) : (
+                  <>
+                    <Fingerprint className="w-4 h-4 text-emerald-400" />
+                    <span>Sign In with Device Biometrics</span>
+                  </>
+                )}
               </button>
             </form>
 

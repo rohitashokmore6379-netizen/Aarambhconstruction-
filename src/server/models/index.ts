@@ -3,6 +3,15 @@ import mongoose, { Schema, Document, Types } from 'mongoose';
 // ----------------------------------------------------
 // USER MODEL
 // ----------------------------------------------------
+export interface IWebAuthnCredential {
+  credentialId: string;
+  publicKey: string;
+  counter: number;
+  deviceType?: string;
+  deviceName?: string;
+  createdAt: Date;
+}
+
 export interface IUser extends Document {
   name: string;
   email: string;
@@ -15,9 +24,23 @@ export interface IUser extends Document {
   resetOtpExpiry?: Date;
   securityQuestion?: string;
   securityAnswer?: string;
+  webauthnCredentials?: IWebAuthnCredential[];
+  currentChallenge?: string;
   createdAt: Date;
   updatedAt: Date;
 }
+
+const WebAuthnCredentialSchema = new Schema(
+  {
+    credentialId: { type: String, required: true },
+    publicKey: { type: String, required: true },
+    counter: { type: Number, default: 0 },
+    deviceType: { type: String },
+    deviceName: { type: String, default: 'Admin Biometric Device' },
+    createdAt: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
 
 const UserSchema = new Schema<IUser>(
   {
@@ -32,6 +55,8 @@ const UserSchema = new Schema<IUser>(
     resetOtpExpiry: { type: Date },
     securityQuestion: { type: String, trim: true },
     securityAnswer: { type: String, trim: true },
+    webauthnCredentials: { type: [WebAuthnCredentialSchema], default: [] },
+    currentChallenge: { type: String },
   },
   { timestamps: true }
 );

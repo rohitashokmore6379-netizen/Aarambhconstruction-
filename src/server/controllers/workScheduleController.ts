@@ -700,10 +700,12 @@ export async function getDailySiteReport(req: Request, res: Response) {
     const endOfDay = new Date(targetDate);
     endOfDay.setHours(23, 59, 59, 999);
 
+    const pId = projectId as string;
+
     const [project, companySettings, workSchedules] = await Promise.all([
-      Project.findById(projectId).populate('siteId').lean(),
+      Project.findById(pId).lean(),
       CompanySettings.findOne().lean(),
-      WorkSchedule.find({ projectId }).sort({ workOrder: 1 }).lean(),
+      WorkSchedule.find({ projectId: pId as any }).sort({ workOrder: 1 }).lean(),
     ]);
 
     if (!project) {
@@ -714,16 +716,16 @@ export async function getDailySiteReport(req: Request, res: Response) {
     workSchedules.forEach((s) => scheduleMap.set(s._id.toString(), s));
 
     // Date range query for records
-    const dateQuery = {
-      projectId,
+    const dateQuery: any = {
+      projectId: pId,
       $or: [
         { date: { $gte: startOfDay, $lte: endOfDay } },
         { createdAt: { $gte: startOfDay, $lte: endOfDay } },
       ],
     };
 
-    const imageDateQuery = {
-      projectId,
+    const imageDateQuery: any = {
+      projectId: pId,
       $or: [
         { uploadedAt: { $gte: startOfDay, $lte: endOfDay } },
         { createdAt: { $gte: startOfDay, $lte: endOfDay } },
@@ -736,15 +738,15 @@ export async function getDailySiteReport(req: Request, res: Response) {
       WorkQuantityRecord.find(dateQuery).sort({ createdAt: 1 }).lean(),
       WorkImage.find(imageDateQuery).sort({ uploadedAt: -1 }).lean(),
       WorkProgressUpdate.find({
-        projectId,
+        projectId: pId as any,
         createdAt: { $gte: startOfDay, $lte: endOfDay },
-      })
+      } as any)
         .sort({ createdAt: 1 })
         .lean(),
       WorkLog.find({
-        projectId,
+        projectId: pId as any,
         workDate: { $gte: startOfDay, $lte: endOfDay },
-      })
+      } as any)
         .populate('workerId')
         .populate('workTypeId')
         .lean(),
@@ -895,12 +897,12 @@ export async function getDailySiteReport(req: Request, res: Response) {
           type: project.projectType,
           status: project.status,
           location: project.location,
-          clientName: project.clientName,
-          clientPhone: project.clientPhone,
-          startDate: project.startDate,
-          expectedEndDate: project.expectedEndDate,
+          clientName: project.client?.name || (project as any).clientName || '',
+          clientPhone: project.client?.phone || (project as any).clientPhone || '',
+          startDate: (project as any).startDate,
+          expectedEndDate: (project as any).expectedEndDate,
           progressPercentage: project.progressPercentage || 0,
-          site: project.siteId,
+          site: (project as any).siteId,
         },
         company: companySettings || {
           companyName: 'ARAMBH CONSTRUCTION',
