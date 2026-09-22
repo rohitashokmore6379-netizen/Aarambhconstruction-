@@ -67,6 +67,8 @@ admin.post('/projects', projectCtrl.createProject);
 admin.put('/projects/:id', projectCtrl.updateProject);
 admin.get('/projects/:id/financial-summary', projectCtrl.getProjectFinancialSummary);
 admin.get('/projects/:id/payments', projectCtrl.getProjectPayments);
+admin.get('/projects/:id/budget-tracking', projectCtrl.getProjectBudgetTracking);
+admin.put('/projects/:id/budget-plan', projectCtrl.updateProjectBudgetPlan);
 
 // Sites
 admin.get('/sites', siteCtrl.getSites);

@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { Project, Site, Worker, Vendor, Material, ClientPayment } from '../models/index.ts';
+import { Project, Site, Worker, Vendor, Material, ClientPayment, DocumentItem } from '../models/index.ts';
 import { AuthRequest } from '../middleware/auth.ts';
 
 export async function globalSearch(req: AuthRequest, res: Response) {
@@ -15,6 +15,7 @@ export async function globalSearch(req: AuthRequest, res: Response) {
           vendors: [],
           materials: [],
           transactions: [],
+          documents: [],
         },
       });
     }
@@ -22,7 +23,7 @@ export async function globalSearch(req: AuthRequest, res: Response) {
     const query = q.trim();
     const regex = new RegExp(query, 'i');
 
-    const [projects, sites, workers, vendors, materials, transactions] = await Promise.all([
+    const [projects, sites, workers, vendors, materials, transactions, documents] = await Promise.all([
       Project.find({
         $or: [{ projectName: regex }, { projectCode: regex }, { location: regex }, { 'client.name': regex }],
       })
@@ -54,6 +55,12 @@ export async function globalSearch(req: AuthRequest, res: Response) {
         .populate('projectId', 'projectName')
         .limit(5)
         .select('receiptNumber ownerName amount paymentDate paymentMethod transactionReference'),
+      DocumentItem.find({
+        $or: [{ name: regex }, { type: regex }],
+      })
+        .populate('projectId', 'projectName')
+        .limit(5)
+        .select('name type url projectId siteId sizeBytes createdAt'),
     ]);
 
     return res.json({
@@ -65,6 +72,7 @@ export async function globalSearch(req: AuthRequest, res: Response) {
         vendors,
         materials,
         transactions,
+        documents,
       },
     });
   } catch (err: any) {

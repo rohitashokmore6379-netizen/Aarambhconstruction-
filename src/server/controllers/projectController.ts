@@ -412,3 +412,465 @@ export async function getProjectPayments(req: AuthRequest, res: Response) {
     return res.status(500).json({ success: false, message: err.message });
   }
 }
+
+// ----------------------------------------------------
+// PROJECT BUDGET TRACKING & COST OVERRUNS (REAL-TIME)
+// ----------------------------------------------------
+export async function getProjectBudgetTracking(req: AuthRequest, res: Response) {
+  try {
+    const { id } = req.params;
+    const { siteId } = req.query;
+
+    const project = await Project.findById(id);
+    if (!project) {
+      return res.status(404).json({ success: false, message: 'Project not found' });
+    }
+
+    const queryFilter: any = { projectId: project._id };
+    if (siteId && siteId !== 'ALL') {
+      queryFilter.siteId = siteId;
+    }
+
+    // Pull from Expenses, MaterialPurchases, WorkerPayments, and VendorPayments in parallel
+    const [materialPurchases, expenses, workerPayments, vendorPayments] = await Promise.all([
+      MaterialPurchase.find({ ...queryFilter, status: { $ne: 'REVERSED' } })
+        .populate('materialId', 'name category unit')
+        .populate('vendorId', 'name companyName')
+        .populate('siteId', 'siteName')
+        .sort({ purchaseDate: -1 }),
+      Expense.find({ ...queryFilter, status: 'PAID' })
+        .populate('siteId', 'siteName')
+        .sort({ date: -1 }),
+      WorkerPayment.find({ ...queryFilter, status: 'PAID' })
+        .populate('workerId', 'name skill')
+        .populate('siteId', 'siteName')
+        .sort({ paymentDate: -1 }),
+      VendorPayment.find({ ...queryFilter, status: 'PAID' })
+        .populate('vendorId', 'name companyName')
+        .populate('siteId', 'siteName')
+        .sort({ paymentDate: -1 }),
+    ]);
+
+    // 1. Calculate Planned Budget Target
+    const plannedTotal =
+      Number(project.budgetPlan?.totalPlannedBudget) ||
+      Number(project.estimatedCost) ||
+      Number(project.contractValue) ||
+      100000;
+
+    const contingencyPct = Number(project.budgetPlan?.contingencyPercentage) ?? 5;
+    const alertThresholdPct = Number(project.budgetPlan?.alertThresholdPercentage) ?? 85;
+
+    // 2. Aggregate Material Purchases
+    let materialPurchasesCost = 0;
+    let materialPaidAmount = 0;
+    let materialPendingAmount = 0;
+    const materialsByCategory: Record<string, { totalAmount: number; count: number; items: any[] }> = {};
+
+    materialPurchases.forEach((mp: any) => {
+      const cost = Number(mp.totalAmount) || Number(mp.quantity * mp.unitPrice) || 0;
+      const paid = Number(mp.paidAmount) || 0;
+      const pending = Number(mp.pendingAmount) || Math.max(0, cost - paid);
+
+      materialPurchasesCost += cost;
+      materialPaidAmount += paid;
+      materialPendingAmount += pending;
+
+      const cat = mp.materialId?.category || 'Other Materials';
+      if (!materialsByCategory[cat]) {
+        materialsByCategory[cat] = { totalAmount: 0, count: 0, items: [] };
+      }
+      materialsByCategory[cat].totalAmount += cost;
+      materialsByCategory[cat].count += 1;
+      materialsByCategory[cat].items.push({
+        id: mp._id,
+        materialName: mp.materialId?.name || 'Material',
+        vendor: mp.vendorId?.companyName || mp.vendorId?.name || 'Supplier',
+        siteName: mp.siteId?.siteName || 'Site',
+        quantity: mp.quantity,
+        unit: mp.unit,
+        unitPrice: mp.unitPrice,
+        totalAmount: cost,
+        paidAmount: paid,
+        purchaseDate: mp.purchaseDate,
+        invoiceNumber: mp.invoiceNumber,
+      });
+    });
+
+    // 3. Aggregate Direct Expenses
+    let directExpensesCost = 0;
+    const expensesByCategory: Record<string, { totalAmount: number; count: number; items: any[] }> = {
+      EQUIPMENT: { totalAmount: 0, count: 0, items: [] },
+      TRANSPORT: { totalAmount: 0, count: 0, items: [] },
+      WORKER: { totalAmount: 0, count: 0, items: [] },
+      MATERIAL: { totalAmount: 0, count: 0, items: [] },
+      VENDOR: { totalAmount: 0, count: 0, items: [] },
+      OTHER: { totalAmount: 0, count: 0, items: [] },
+    };
+
+    expenses.forEach((exp: any) => {
+      const amount = Number(exp.amount) || 0;
+      directExpensesCost += amount;
+
+      const catKey = exp.category?.toUpperCase() || 'OTHER';
+      if (!expensesByCategory[catKey]) {
+        expensesByCategory[catKey] = { totalAmount: 0, count: 0, items: [] };
+      }
+      expensesByCategory[catKey].totalAmount += amount;
+      expensesByCategory[catKey].count += 1;
+      expensesByCategory[catKey].items.push({
+        id: exp._id,
+        category: exp.category,
+        description: exp.description,
+        amount,
+        date: exp.date,
+        siteName: exp.siteId?.siteName || 'Site',
+        paymentMethod: exp.paymentMethod,
+        receiptNumber: exp.receiptNumber,
+      });
+    });
+
+    // 4. Aggregate Worker Wages & Vendor Payments
+    const workerWagesCost = workerPayments.reduce((sum, w) => sum + (Number(w.amount) || 0), 0);
+    const vendorPaymentsCost = vendorPayments.reduce((sum, v) => sum + (Number(v.amount) || 0), 0);
+
+    // 5. Consolidated Category Actuals
+    // - Materials: MaterialPurchases + direct MATERIAL expenses
+    const totalMaterialsActual = materialPurchasesCost + (expensesByCategory['MATERIAL']?.totalAmount || 0);
+    // - Labor: WorkerPayments + direct WORKER expenses
+    const totalLaborActual = workerWagesCost + (expensesByCategory['WORKER']?.totalAmount || 0);
+    // - Equipment: EQUIPMENT expenses
+    const totalEquipmentActual = expensesByCategory['EQUIPMENT']?.totalAmount || 0;
+    // - Transport: TRANSPORT expenses
+    const totalTransportActual = expensesByCategory['TRANSPORT']?.totalAmount || 0;
+    // - Subcontractors/Vendors: VendorPayments + direct VENDOR expenses
+    const totalSubcontractActual = vendorPaymentsCost + (expensesByCategory['VENDOR']?.totalAmount || 0);
+    // - Site Overheads & Permits: OTHER expenses
+    const totalOverheadsActual = expensesByCategory['OTHER']?.totalAmount || 0;
+
+    const totalActualExpenditures =
+      totalMaterialsActual +
+      totalLaborActual +
+      totalEquipmentActual +
+      totalTransportActual +
+      totalSubcontractActual +
+      totalOverheadsActual;
+
+    // 6. Category Target Allocations (Planned vs Actual)
+    // Check if customized targets exist
+    const customTargetsMap = new Map<string, number>();
+    if (project.budgetPlan?.categoryTargets && Array.isArray(project.budgetPlan.categoryTargets)) {
+      project.budgetPlan.categoryTargets.forEach((t) => {
+        customTargetsMap.set(t.category.toUpperCase(), Number(t.plannedAmount) || 0);
+      });
+    }
+
+    // Default distribution proportions if not customized
+    const defaultProportions: Record<string, number> = {
+      MATERIALS: 0.48, // 48%
+      LABOR: 0.26, // 26%
+      EQUIPMENT: 0.10, // 10%
+      TRANSPORT: 0.06, // 6%
+      SUBCONTRACT: 0.06, // 6%
+      OVERHEADS: 0.04, // 4%
+    };
+
+    const categoryDefinitions = [
+      {
+        key: 'MATERIALS',
+        label: 'Materials Procurement',
+        description: 'Cement, steel, sand, aggregate, bricks & raw stock',
+        actual: totalMaterialsActual,
+        itemsCount: materialPurchases.length + (expensesByCategory['MATERIAL']?.count || 0),
+        color: '#3b82f6', // blue
+      },
+      {
+        key: 'LABOR',
+        label: 'Site Labor & Wages',
+        description: 'Masons, helpers, daily wages & subcontractor labor',
+        actual: totalLaborActual,
+        itemsCount: workerPayments.length + (expensesByCategory['WORKER']?.count || 0),
+        color: '#f59e0b', // amber
+      },
+      {
+        key: 'EQUIPMENT',
+        label: 'Machinery & Equipment Rental',
+        description: 'JCB, concrete mixer hire, vibrators, scaffolding',
+        actual: totalEquipmentActual,
+        itemsCount: expensesByCategory['EQUIPMENT']?.count || 0,
+        color: '#8b5cf6', // purple
+      },
+      {
+        key: 'TRANSPORT',
+        label: 'Logistics & Fuel',
+        description: 'Material freight, transport tractor/trucks, diesel',
+        actual: totalTransportActual,
+        itemsCount: expensesByCategory['TRANSPORT']?.count || 0,
+        color: '#10b981', // emerald
+      },
+      {
+        key: 'SUBCONTRACT',
+        label: 'Vendors & Subcontractors',
+        description: 'Specialist fabrications, plumbing, electrical contracts',
+        actual: totalSubcontractActual,
+        itemsCount: vendorPayments.length + (expensesByCategory['VENDOR']?.count || 0),
+        color: '#06b6d4', // cyan
+      },
+      {
+        key: 'OVERHEADS',
+        label: 'Site Overheads & Permits',
+        description: 'Municipal fees, testing lab, tea/refreshments, utility',
+        actual: totalOverheadsActual,
+        itemsCount: expensesByCategory['OTHER']?.count || 0,
+        color: '#ec4899', // pink
+      },
+    ];
+
+    const categoryComparisons = categoryDefinitions.map((cat) => {
+      const planned = customTargetsMap.has(cat.key)
+        ? customTargetsMap.get(cat.key)!
+        : Math.round(plannedTotal * (defaultProportions[cat.key] || 0.05));
+
+      const variance = planned - cat.actual; // positive = budget remaining, negative = cost overrun
+      const isOverrun = cat.actual > planned;
+      const overrunAmount = isOverrun ? cat.actual - planned : 0;
+      const percentUsed = planned > 0 ? (cat.actual / planned) * 100 : cat.actual > 0 ? 100 : 0;
+
+      let status: 'SAFE' | 'WARNING' | 'OVERRUN' = 'SAFE';
+      if (isOverrun) {
+        status = 'OVERRUN';
+      } else if (percentUsed >= alertThresholdPct) {
+        status = 'WARNING';
+      }
+
+      return {
+        ...cat,
+        plannedAmount: planned,
+        actualAmount: cat.actual,
+        variance,
+        isOverrun,
+        overrunAmount,
+        percentUsed: Math.round(percentUsed * 10) / 10,
+        status,
+      };
+    });
+
+    // 7. Overall Variance & Status
+    const totalVariance = plannedTotal - totalActualExpenditures;
+    const isTotalOverrun = totalActualExpenditures > plannedTotal;
+    const totalOverrunAmount = isTotalOverrun ? totalActualExpenditures - plannedTotal : 0;
+    const totalPercentUsed = plannedTotal > 0 ? (totalActualExpenditures / plannedTotal) * 100 : 0;
+
+    let overallStatus: 'SAFE' | 'WARNING' | 'OVERRUN' = 'SAFE';
+    if (isTotalOverrun) {
+      overallStatus = 'OVERRUN';
+    } else if (totalPercentUsed >= alertThresholdPct) {
+      overallStatus = 'WARNING';
+    }
+
+    // 8. Generate Real-Time Cost Overrun Alerts
+    const alerts: any[] = [];
+    if (isTotalOverrun) {
+      alerts.push({
+        id: 'total-overrun',
+        severity: 'CRITICAL',
+        title: 'Total Project Cost Overrun Alert',
+        message: `Project total expenditures of ₹${totalActualExpenditures.toLocaleString()} have exceeded the planned budget ceiling of ₹${plannedTotal.toLocaleString()} by ₹${totalOverrunAmount.toLocaleString()} (${Math.round(totalPercentUsed)}% spent).`,
+        category: 'OVERALL',
+        overrunAmount: totalOverrunAmount,
+      });
+    } else if (totalPercentUsed >= alertThresholdPct) {
+      alerts.push({
+        id: 'total-warning',
+        severity: 'WARNING',
+        title: 'Project Budget Approaching Ceiling',
+        message: `Project has utilized ${Math.round(totalPercentUsed)}% of its planned budget limit. Remaining buffer: ₹${Math.max(0, totalVariance).toLocaleString()}.`,
+        category: 'OVERALL',
+        overrunAmount: 0,
+      });
+    }
+
+    // Category specific alerts
+    categoryComparisons.forEach((cat) => {
+      if (cat.isOverrun) {
+        alerts.push({
+          id: `overrun-${cat.key.toLowerCase()}`,
+          severity: 'CRITICAL',
+          title: `${cat.label} Overrun Detected`,
+          message: `${cat.label} expenditures of ₹${cat.actualAmount.toLocaleString()} exceeded the planned allocation of ₹${cat.plannedAmount.toLocaleString()} by ₹${cat.overrunAmount.toLocaleString()} (${cat.percentUsed}% consumed).`,
+          category: cat.key,
+          overrunAmount: cat.overrunAmount,
+        });
+      } else if (cat.percentUsed >= alertThresholdPct) {
+        alerts.push({
+          id: `warning-${cat.key.toLowerCase()}`,
+          severity: 'WARNING',
+          title: `${cat.label} Near Budget Limit`,
+          message: `${cat.label} is at ${cat.percentUsed}% of planned limit. ₹${cat.variance.toLocaleString()} remaining before cost overrun.`,
+          category: cat.key,
+          overrunAmount: 0,
+        });
+      }
+    });
+
+    // 9. Monthly Expenditure Trajectory (Time-Series)
+    // Group all expenditures by month (YYYY-MM)
+    const monthlyMap: Record<string, { materials: number; expenses: number; labor: number; total: number }> = {};
+
+    materialPurchases.forEach((mp: any) => {
+      const d = mp.purchaseDate ? new Date(mp.purchaseDate) : new Date();
+      const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (!monthlyMap[monthKey]) monthlyMap[monthKey] = { materials: 0, expenses: 0, labor: 0, total: 0 };
+      const amt = Number(mp.totalAmount) || Number(mp.quantity * mp.unitPrice) || 0;
+      monthlyMap[monthKey].materials += amt;
+      monthlyMap[monthKey].total += amt;
+    });
+
+    expenses.forEach((exp: any) => {
+      const d = exp.date ? new Date(exp.date) : new Date();
+      const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (!monthlyMap[monthKey]) monthlyMap[monthKey] = { materials: 0, expenses: 0, labor: 0, total: 0 };
+      const amt = Number(exp.amount) || 0;
+      monthlyMap[monthKey].expenses += amt;
+      monthlyMap[monthKey].total += amt;
+    });
+
+    workerPayments.forEach((w: any) => {
+      const d = w.paymentDate ? new Date(w.paymentDate) : new Date();
+      const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (!monthlyMap[monthKey]) monthlyMap[monthKey] = { materials: 0, expenses: 0, labor: 0, total: 0 };
+      const amt = Number(w.amount) || 0;
+      monthlyMap[monthKey].labor += amt;
+      monthlyMap[monthKey].total += amt;
+    });
+
+    const sortedMonths = Object.keys(monthlyMap).sort();
+    let cumulative = 0;
+    const monthlyTrend = sortedMonths.map((m, idx) => {
+      const item = monthlyMap[m];
+      cumulative += item.total;
+      // Pro-rata planned trajectory target benchmark
+      const plannedTrajectory = Math.round((plannedTotal / Math.max(sortedMonths.length, 6)) * (idx + 1));
+      return {
+        month: m,
+        materials: item.materials,
+        expenses: item.expenses,
+        labor: item.labor,
+        monthlyTotal: item.total,
+        cumulativeActual: cumulative,
+        plannedTrajectory: Math.min(plannedTrajectory, plannedTotal),
+      };
+    });
+
+    // 10. Material Category Breakdown List
+    const materialsBreakdownList = Object.keys(materialsByCategory).map((catName) => {
+      const catData = materialsByCategory[catName];
+      const shareOfMaterials = materialPurchasesCost > 0 ? (catData.totalAmount / materialPurchasesCost) * 100 : 0;
+      return {
+        categoryName: catName,
+        totalAmount: catData.totalAmount,
+        count: catData.count,
+        sharePercentage: Math.round(shareOfMaterials * 10) / 10,
+        items: catData.items.slice(0, 10),
+      };
+    }).sort((a, b) => b.totalAmount - a.totalAmount);
+
+    return res.json({
+      success: true,
+      data: {
+        project: {
+          id: project._id,
+          projectName: project.projectName,
+          projectCode: project.projectCode,
+          contractValue: project.contractValue,
+          estimatedCost: project.estimatedCost,
+          budgetPlan: project.budgetPlan,
+        },
+        summary: {
+          totalPlannedBudget: plannedTotal,
+          totalActualExpenditures,
+          variance: totalVariance,
+          variancePercentage: Math.round(((totalVariance) / plannedTotal) * 100),
+          percentUsed: Math.round(totalPercentUsed * 10) / 10,
+          isOverrun: isTotalOverrun,
+          overrunAmount: totalOverrunAmount,
+          status: overallStatus,
+          contingencyPercentage: contingencyPct,
+          alertThresholdPercentage: alertThresholdPct,
+          materialPurchasesTotal: materialPurchasesCost,
+          materialPaidAmount,
+          materialPendingAmount,
+          directExpensesTotal: directExpensesCost,
+          workerWagesTotal: workerWagesCost,
+          vendorPaymentsTotal: vendorPaymentsCost,
+        },
+        categoryComparisons,
+        materialsBreakdown: materialsBreakdownList,
+        monthlyTrend,
+        alerts,
+        counts: {
+          materialPurchasesCount: materialPurchases.length,
+          expensesCount: expenses.length,
+          workerPaymentsCount: workerPayments.length,
+        },
+      },
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+}
+
+export async function updateProjectBudgetPlan(req: AuthRequest, res: Response) {
+  try {
+    const { id } = req.params;
+    const { totalPlannedBudget, categoryTargets, contingencyPercentage, alertThresholdPercentage } = req.body;
+
+    const project = await Project.findById(id);
+    if (!project) {
+      return res.status(404).json({ success: false, message: 'Project not found' });
+    }
+
+    if (!project.budgetPlan) {
+      project.budgetPlan = {};
+    }
+
+    if (totalPlannedBudget !== undefined) {
+      project.budgetPlan.totalPlannedBudget = Number(totalPlannedBudget);
+      project.estimatedCost = Number(totalPlannedBudget);
+    }
+    if (contingencyPercentage !== undefined) {
+      project.budgetPlan.contingencyPercentage = Number(contingencyPercentage);
+    }
+    if (alertThresholdPercentage !== undefined) {
+      project.budgetPlan.alertThresholdPercentage = Number(alertThresholdPercentage);
+    }
+    if (Array.isArray(categoryTargets)) {
+      project.budgetPlan.categoryTargets = categoryTargets.map((t: any) => ({
+        category: String(t.category).toUpperCase(),
+        plannedAmount: Number(t.plannedAmount) || 0,
+        notes: t.notes || '',
+      }));
+    }
+
+    await project.save();
+
+    await createAuditLog({
+      userId: req.user?.id,
+      userName: req.user?.name,
+      action: 'BUDGET_PLAN_UPDATED',
+      entityType: 'Project',
+      entityId: project._id.toString(),
+      projectId: project._id.toString(),
+      description: `Updated planned budget targets for project "${project.projectName}" (Ceiling: ₹${project.budgetPlan.totalPlannedBudget})`,
+      ipAddress: req.ip,
+    });
+
+    return res.json({
+      success: true,
+      data: project.budgetPlan,
+      message: 'Project budget plan and category allocations updated successfully.',
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+}

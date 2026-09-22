@@ -31,8 +31,10 @@ import { ReceivePaymentModal } from '../../components/payments/ReceivePaymentMod
 import { PaymentDrawer } from '../../components/payments/PaymentDrawer.tsx';
 import { SiteQRCodeModal } from '../../components/common/SiteQRCodeModal.tsx';
 import { ProjectWorkScheduleTab } from '../../components/workSchedule/ProjectWorkScheduleTab.tsx';
+import { ProjectGanttTab } from '../../components/workSchedule/ProjectGanttTab.tsx';
 import { GanttChart } from '../../components/workSchedule/GanttChart.tsx';
-import { CalendarCheck, BarChart2 } from 'lucide-react';
+import { ProjectBudgetTrackingTab } from '../../components/budget/ProjectBudgetTrackingTab.tsx';
+import { CalendarCheck, BarChart2, TrendingDown } from 'lucide-react';
 
 export function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -180,6 +182,7 @@ export function ProjectDetailPage() {
   const fin = project.financials;
 
   const tabs = [
+    { key: 'budget', label: 'Budget & Cost Overruns', icon: TrendingDown },
     { key: 'payments', label: 'Financial Ledger & Receipts', icon: Receipt },
     { key: 'gantt', label: 'Gantt Progress Chart', icon: BarChart2 },
     { key: 'schedule', label: 'Work Schedule (26 Stages)', icon: CalendarCheck },
@@ -295,13 +298,20 @@ export function ProjectDetailPage() {
           </div>
 
           {/* Remaining Budget (Inflow - Outflow) */}
-          <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-900 to-amber-950/20 border border-amber-500/30 shadow-md">
-            <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block mb-1">
-              Remaining Budget
-            </span>
+          <div
+            onClick={() => setSearchParams({ tab: 'budget' })}
+            className="p-4 rounded-2xl bg-gradient-to-br from-slate-900 to-amber-950/20 border border-amber-500/30 shadow-md cursor-pointer hover:border-amber-500 hover:shadow-amber-500/10 transition-all group"
+            title="Click to open Real-Time Budget & Cost Overrun Tracker"
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block">
+                Remaining Budget
+              </span>
+              <TrendingDown className="w-3.5 h-3.5 text-amber-400 opacity-60 group-hover:opacity-100 transition-opacity" />
+            </div>
             <div className="text-xl font-black text-white font-mono">{formatCurrency(fin.remainingBudget)}</div>
             <span className="text-[10px] text-emerald-400 font-semibold mt-1 block">
-              Available Cash Liquidity
+              Available Cash Liquidity • View Analysis →
             </span>
           </div>
         </div>
@@ -346,6 +356,16 @@ export function ProjectDetailPage() {
           );
         })}
       </div>
+
+      {/* Tab: Real-Time Budget Tracking & Cost Overrun Engine */}
+      {currentTab === 'budget' && (
+        <ProjectBudgetTrackingTab
+          projectId={project._id}
+          project={project}
+          sites={sites}
+          onProjectUpdated={loadProjectData}
+        />
+      )}
 
       {/* Tab 1: Financial Ledger & Receipts */}
       {currentTab === 'payments' && (
@@ -444,12 +464,14 @@ export function ProjectDetailPage() {
         </div>
       )}
 
-      {/* Tab: Gantt Chart Progress */}
+      {/* Tab: D3 Gantt Progress Chart & Milestone Dependency Engine */}
       {currentTab === 'gantt' && (
-        <ProjectWorkScheduleTab
+        <ProjectGanttTab
           projectId={project._id}
           projectName={project.projectName}
+          project={project}
           sites={sites}
+          onProjectUpdated={loadProjectData}
         />
       )}
 

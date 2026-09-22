@@ -65,6 +65,16 @@ export interface Project {
   };
   contractValue: number;
   estimatedCost: number;
+  budgetPlan?: {
+    totalPlannedBudget?: number;
+    contingencyPercentage?: number;
+    alertThresholdPercentage?: number;
+    categoryTargets?: {
+      category: string;
+      plannedAmount: number;
+      notes?: string;
+    }[];
+  };
   status: 'PLANNING' | 'IN_PROGRESS' | 'ON_HOLD' | 'COMPLETED' | 'ARCHIVED';
   progressPercentage: number;
   isPublic: boolean;
@@ -647,6 +657,107 @@ export interface DailySiteReportData {
     author?: string;
     time?: string;
   }>;
+}
+
+export interface BudgetCategoryComparison {
+  key: string;
+  label: string;
+  description: string;
+  plannedAmount: number;
+  actualAmount: number;
+  variance: number;
+  isOverrun: boolean;
+  overrunAmount: number;
+  percentUsed: number;
+  status: 'SAFE' | 'WARNING' | 'OVERRUN';
+  itemsCount: number;
+  color: string;
+}
+
+export interface MaterialCategoryBreakdown {
+  categoryName: string;
+  totalAmount: number;
+  count: number;
+  sharePercentage: number;
+  items: Array<{
+    id: string;
+    materialName: string;
+    vendor: string;
+    siteName: string;
+    quantity: number;
+    unit: string;
+    unitPrice: number;
+    totalAmount: number;
+    paidAmount: number;
+    purchaseDate: string;
+    invoiceNumber?: string;
+  }>;
+}
+
+export interface MonthlyBudgetTrajectory {
+  month: string;
+  materials: number;
+  expenses: number;
+  labor: number;
+  monthlyTotal: number;
+  cumulativeActual: number;
+  plannedTrajectory: number;
+}
+
+export interface CostOverrunAlert {
+  id: string;
+  severity: 'CRITICAL' | 'WARNING' | 'HEALTHY';
+  title: string;
+  message: string;
+  category: string;
+  overrunAmount: number;
+}
+
+export interface ProjectBudgetTrackingData {
+  project: {
+    id: string;
+    projectName: string;
+    projectCode: string;
+    contractValue: number;
+    estimatedCost: number;
+    budgetPlan?: {
+      totalPlannedBudget?: number;
+      categoryTargets?: {
+        category: string;
+        plannedAmount: number;
+        notes?: string;
+      }[];
+      contingencyPercentage?: number;
+      alertThresholdPercentage?: number;
+    };
+  };
+  summary: {
+    totalPlannedBudget: number;
+    totalActualExpenditures: number;
+    variance: number;
+    variancePercentage: number;
+    percentUsed: number;
+    isOverrun: boolean;
+    overrunAmount: number;
+    status: 'SAFE' | 'WARNING' | 'OVERRUN';
+    contingencyPercentage: number;
+    alertThresholdPercentage: number;
+    materialPurchasesTotal: number;
+    materialPaidAmount: number;
+    materialPendingAmount: number;
+    directExpensesTotal: number;
+    workerWagesTotal: number;
+    vendorPaymentsTotal: number;
+  };
+  categoryComparisons: BudgetCategoryComparison[];
+  materialsBreakdown: MaterialCategoryBreakdown[];
+  monthlyTrend: MonthlyBudgetTrajectory[];
+  alerts: CostOverrunAlert[];
+  counts: {
+    materialPurchasesCount: number;
+    expensesCount: number;
+    workerPaymentsCount: number;
+  };
 }
 
 

@@ -64,6 +64,19 @@ const UserSchema = new Schema<IUser>(
 // ----------------------------------------------------
 // PROJECT MODEL
 // ----------------------------------------------------
+export interface IBudgetCategoryTarget {
+  category: string;
+  plannedAmount: number;
+  notes?: string;
+}
+
+export interface IProjectBudgetPlan {
+  totalPlannedBudget?: number;
+  categoryTargets?: IBudgetCategoryTarget[];
+  contingencyPercentage?: number;
+  alertThresholdPercentage?: number;
+}
+
 export interface IProject extends Document {
   projectCode: string;
   projectName: string;
@@ -78,6 +91,7 @@ export interface IProject extends Document {
   };
   contractValue: number;
   estimatedCost: number;
+  budgetPlan?: IProjectBudgetPlan;
   status: 'PLANNING' | 'IN_PROGRESS' | 'ON_HOLD' | 'COMPLETED' | 'ARCHIVED';
   progressPercentage: number;
   isPublic: boolean;
@@ -104,6 +118,18 @@ const ProjectSchema = new Schema<IProject>(
     },
     contractValue: { type: Number, required: true, default: 0, min: 0 },
     estimatedCost: { type: Number, required: true, default: 0, min: 0 },
+    budgetPlan: {
+      totalPlannedBudget: { type: Number, default: 0 },
+      contingencyPercentage: { type: Number, default: 5 },
+      alertThresholdPercentage: { type: Number, default: 85 },
+      categoryTargets: [
+        {
+          category: { type: String, required: true },
+          plannedAmount: { type: Number, required: true, default: 0 },
+          notes: { type: String },
+        },
+      ],
+    },
     status: {
       type: String,
       enum: ['PLANNING', 'IN_PROGRESS', 'ON_HOLD', 'COMPLETED', 'ARCHIVED'],

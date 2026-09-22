@@ -14,13 +14,16 @@ import {
   X,
 } from 'lucide-react';
 import api from '../../services/api.ts';
-import { Project } from '../../types.ts';
+import { Project, Site } from '../../types.ts';
 import { formatCurrency, getStatusBadgeClass } from '../../utils/formatters.ts';
 import { ReceivePaymentModal } from '../../components/payments/ReceivePaymentModal.tsx';
+import { ProjectsSiteMap } from '../../components/maps/ProjectsSiteMap.tsx';
 
 export function ProjectsListPage() {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [sites, setSites] = useState<Site[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [viewMode, setViewMode] = useState<'grid' | 'map'>('grid');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [createModalOpen, setCreateModalOpen] = useState<boolean>(false);
@@ -40,22 +43,28 @@ export function ProjectsListPage() {
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [formError, setFormError] = useState<string>('');
 
-  const loadProjects = async () => {
+  const loadProjectsAndSites = async () => {
     setLoading(true);
     try {
-      const res = await api.get('/admin/projects');
-      if (res.data.success) {
-        setProjects(res.data.data);
+      const [projRes, siteRes] = await Promise.all([
+        api.get('/admin/projects'),
+        api.get('/admin/sites'),
+      ]);
+      if (projRes.data.success) {
+        setProjects(projRes.data.data);
+      }
+      if (siteRes.data.success) {
+        setSites(siteRes.data.data || []);
       }
     } catch (err) {
-      console.error('Failed to load projects', err);
+      console.error('Failed to load projects and sites', err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadProjects();
+    loadProjectsAndSites();
   }, []);
 
   const handleCreateProject = async (e: React.FormEvent) => {
@@ -86,7 +95,7 @@ export function ProjectsListPage() {
       if (res.data.success) {
         setCreateModalOpen(false);
         resetForm();
-        loadProjects();
+        loadProjectsAndSites();
       }
     } catch (err: any) {
       setFormError(err.response?.data?.message || 'Failed to create project.');
@@ -126,17 +135,54 @@ export function ProjectsListPage() {
           </p>
         </div>
 
-        <button
-          onClick={() => setCreateModalOpen(true)}
-          className="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md shadow-amber-500/10 transition-all self-start sm:self-auto"
-        >
-          <Plus className="w-4 h-4" />
-          <span>New Project</span>
-        </button>
+        <div className="flex items-center gap-3 self-start sm:self-auto">
+          {/* View Mode Switcher: Cards vs Interactive Google Map */}
+          <div className="flex items-center p-1 bg-slate-900 border border-slate-800 rounded-xl">
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
+                viewMode === 'grid'
+                  ? 'bg-amber-500 text-slate-950 shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Building2 className="w-3.5 h-3.5" />
+              <span>Cards Grid</span>
+            </button>
+            <button
+              onClick={() => setViewMode('map')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
+                viewMode === 'map'
+                  ? 'bg-amber-500 text-slate-950 shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <MapPin className="w-3.5 h-3.5" />
+              <span>Sites Map</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
+            </button>
+          </div>
+
+          <button
+            onClick={() => setCreateModalOpen(true)}
+            className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md shadow-amber-500/10 transition-all"
+          >
+            <Plus className="w-4 h-4" />
+            <span>New Project</span>
+          </button>
+        </div>
       </div>
 
-      {/* Filter & Search Toolbar */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 bg-slate-900 border border-slate-800 rounded-2xl">
+      {viewMode === 'map' ? (
+        <ProjectsSiteMap
+          projects={projects}
+          sites={sites}
+          onSelectProject={(projId) => navigate(`/admin/projects/${projId}`)}
+        />
+      ) : (
+        <>
+          {/* Filter & Search Toolbar */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 bg-slate-900 border border-slate-800 rounded-2xl">
         <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto pb-2 sm:pb-0">
           {['ALL', 'IN_PROGRESS', 'PLANNING', 'COMPLETED'].map((st) => (
             <button
@@ -267,6 +313,8 @@ export function ProjectsListPage() {
           })}
         </div>
       )}
+    </>
+  )}
 
       {/* Create Project Modal */}
       {createModalOpen && (
@@ -417,7 +465,7 @@ export function ProjectsListPage() {
           setTargetProjectId('');
         }}
         onSuccess={() => {
-          loadProjects();
+          loadProjectsAndSites();
         }}
       />
     </div>

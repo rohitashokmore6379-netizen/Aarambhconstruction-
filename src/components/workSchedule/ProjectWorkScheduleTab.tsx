@@ -18,6 +18,7 @@ import { InitializeScheduleModal } from './InitializeScheduleModal.tsx';
 import { CreateActivityModal } from './CreateActivityModal.tsx';
 import { UpdateProgressModal } from './UpdateProgressModal.tsx';
 import { WorkScheduleDetailDrawer } from './WorkScheduleDetailDrawer.tsx';
+import { D3GanttChart } from './D3GanttChart.tsx';
 import { GanttChart } from './GanttChart.tsx';
 
 interface Props {
@@ -170,7 +171,7 @@ export function ProjectWorkScheduleTab({ projectId, projectName, sites }: Props)
           </button>
         </div>
       ) : viewMode === 'gantt' ? (
-        <GanttChart
+        <D3GanttChart
           schedules={filtered}
           projectName={projectName}
           onSelectActivity={(id) => setSelectedScheduleIdForDrawer(id)}
